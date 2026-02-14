@@ -1,0 +1,17 @@
+{
+  "apiKey": 41,
+  "type": "request",
+  "listeners": ["broker", "controller"],
+  "name": "DescribeDelegationTokenRequest",
+  "validVersions": "1-3",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "Owners", "type": "[]DescribeDelegationTokenOwner", "versions": "0+", "nullableVersions": "0+",
+      "about": "Each owner that we want to describe delegation tokens for, or null to describe all tokens.", "fields": [
+      { "name": "PrincipalType", "type": "string", "versions": "0+",
+        "about": "The owner principal type." },
+      { "name": "PrincipalName", "type": "string", "versions": "0+",
+        "about": "The owner principal name." }
+    ]}
+  ]
+}

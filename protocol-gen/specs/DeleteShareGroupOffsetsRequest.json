@@ -1,0 +1,17 @@
+{
+  "apiKey": 92,
+  "type": "request",
+  "listeners": ["broker"],
+  "name": "DeleteShareGroupOffsetsRequest",
+  "validVersions": "0",
+  "flexibleVersions": "0+",
+  "fields": [
+    { "name": "GroupId", "type": "string", "versions": "0+", "entityType": "groupId",
+      "about": "The group identifier." },
+    { "name": "Topics", "type": "[]DeleteShareGroupOffsetsRequestTopic", "versions": "0+",
+      "about": "The topics to delete offsets for.",  "fields": [
+      { "name": "TopicName", "type": "string", "versions": "0+", "entityType": "topicName",
+        "about": "The topic name." }
+    ]}
+  ]
+}

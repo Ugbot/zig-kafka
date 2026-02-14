@@ -1,0 +1,26 @@
+{
+  "apiKey": 27,
+  "type": "response",
+  "name": "WriteTxnMarkersResponse",
+  "validVersions": "1",
+  "flexibleVersions": "1+",
+  "fields": [
+    { "name": "Markers", "type": "[]WritableTxnMarkerResult", "versions": "0+",
+      "about": "The results for writing makers.", "fields": [
+      { "name": "ProducerId", "type": "int64", "versions": "0+", "entityType": "producerId",
+        "about": "The current producer ID in use by the transactional ID." },
+      { "name": "Topics", "type": "[]WritableTxnMarkerTopicResult", "versions": "0+",
+        "about": "The results by topic.", "fields": [
+        { "name": "Name", "type": "string", "versions": "0+", "entityType": "topicName",
+          "about": "The topic name." },
+        { "name": "Partitions", "type": "[]WritableTxnMarkerPartitionResult", "versions": "0+",
+          "about": "The results by partition.", "fields": [
+          { "name": "PartitionIndex", "type": "int32", "versions": "0+",
+            "about": "The partition index." },
+          { "name": "ErrorCode", "type": "int16", "versions": "0+",
+            "about": "The error code, or 0 if there was no error." }
+        ]}
+      ]}
+    ]}
+  ]
+}

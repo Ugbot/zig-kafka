@@ -1,0 +1,6 @@
+{
+  "apiKey": 5,
+  "type": "response",
+  "name": "StopReplicaResponse",
+  "validVersions": "none"
+}

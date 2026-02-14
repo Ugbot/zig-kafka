@@ -1,0 +1,15 @@
+{
+  "apiKey": 89,
+  "type": "request",
+  "listeners": ["broker"],
+  "name": "StreamsGroupDescribeRequest",
+  "validVersions": "0",
+  "flexibleVersions": "0+",
+  "latestVersionUnstable": true,
+  "fields": [
+    { "name": "GroupIds", "type": "[]string", "versions": "0+", "entityType": "groupId",
+      "about": "The ids of the groups to describe" },
+    { "name": "IncludeAuthorizedOperations", "type": "bool", "versions": "0+",
+      "about": "Whether to include authorized operations." }
+  ]
+}

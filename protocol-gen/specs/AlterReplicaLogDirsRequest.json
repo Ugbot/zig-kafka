@@ -1,0 +1,22 @@
+{
+  "apiKey": 34,
+  "type": "request",
+  "listeners": ["broker"],
+  "name": "AlterReplicaLogDirsRequest",
+  "validVersions": "1-2",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "Dirs", "type": "[]AlterReplicaLogDir", "versions": "0+", 
+      "about": "The alterations to make for each directory.", "fields": [
+      { "name": "Path", "type": "string", "versions": "0+", "mapKey": true,
+        "about": "The absolute directory path." },
+      { "name": "Topics", "type": "[]AlterReplicaLogDirTopic", "versions": "0+",
+        "about": "The topics to add to the directory.",  "fields": [
+        { "name": "Name", "type": "string", "versions": "0+", "mapKey": true, "entityType": "topicName",
+          "about": "The topic name." },
+        { "name": "Partitions", "type": "[]int32", "versions": "0+",
+          "about": "The partition indexes." }
+      ]}
+    ]}
+  ]
+}

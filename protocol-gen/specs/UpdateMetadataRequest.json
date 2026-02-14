@@ -1,0 +1,6 @@
+{
+  "apiKey": 6,
+  "type": "request",
+  "name": "UpdateMetadataRequest",
+  "validVersions": "none"
+}

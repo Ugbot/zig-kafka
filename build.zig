@@ -1,71 +1,155 @@
 const std = @import("std");
 
+/// Zig Kafka Toolkit - Unified Build System
+///
+/// This builds three main components:
+/// 1. Protocol Generator - kafka-protocol-generator executable
+/// 2. SDK - Native Zig Kafka client library
+/// 3. C Compatibility - librdkafka-compatible shared library
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Generated protocol types module (used internally by wire/client code)
-    const kafka_generated = b.addModule("kafka_generated", .{
-        .root_source_file = b.path("src/generated_index.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    //
+    // Protocol Generator
+    //
 
-    // Main library module
-    const lib_module = b.addModule("zig-kafka", .{
-        .root_source_file = b.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    lib_module.addImport("kafka_generated", kafka_generated);
-
-    // Static library artifact
-    const lib = b.addStaticLibrary(.{
-        .name = "zig-kafka",
-        .root_source_file = b.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    b.installArtifact(lib);
-
-    // Generator executable
     const generator = b.addExecutable(.{
         .name = "kafka-protocol-generator",
-        .root_source_file = b.path("generator/src/main.zig"),
+        .root_source_file = b.path("protocol-gen/src/main.zig"),
         .target = target,
-        .optimize = .ReleaseFast,
+        .optimize = .ReleaseFast, // Generator should be fast
     });
     b.installArtifact(generator);
 
-    // Run generator command
     const run_generator = b.addRunArtifact(generator);
+    run_generator.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_generator.addArgs(args);
     }
-    const generator_step = b.step("generate", "Run protocol generator");
-    generator_step.dependOn(&run_generator.step);
 
+    const gen_step = b.step("gen", "Run the protocol generator");
+    gen_step.dependOn(&run_generator.step);
+
+    //
+    // SDK Module
+    //
+
+    const kafka_generated = b.addModule("kafka_generated", .{
+        .root_source_file = b.path("sdk/src/generated_index.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const kafka = b.addModule("kafka", .{
+        .root_source_file = b.path("sdk/src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    kafka.addImport("kafka_generated", kafka_generated);
+
+    // SDK static library (optional, for linking)
+    const sdk_lib = b.addStaticLibrary(.{
+        .name = "kafka",
+        .root_source_file = b.path("sdk/src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    sdk_lib.root_module.addImport("kafka_generated", kafka_generated);
+    b.installArtifact(sdk_lib);
+
+    //
+    // C Compatibility Library
+    //
+
+    const c_lib = b.addSharedLibrary(.{
+        .name = "rdkafka",
+        .root_source_file = b.path("c-compat/src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .version = .{ .major = 2, .minor = 13, .patch = 0 },
+    });
+    c_lib.root_module.addImport("kafka", kafka);
+    c_lib.linkLibC();
+    b.installArtifact(c_lib);
+
+    // Install C headers
+    const install_header = b.addInstallFile(
+        b.path("c-compat/include/rdkafka.h"),
+        "include/rdkafka.h",
+    );
+    b.getInstallStep().dependOn(&install_header.step);
+
+    //
     // Tests
-    const tests = b.addTest(.{
-        .root_source_file = b.path("tests/protocol_tests.zig"),
+    //
+
+    // SDK unit tests
+    const sdk_tests = b.addTest(.{
+        .name = "sdk-tests",
+        .root_source_file = b.path("sdk/src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
-    tests.root_module.addImport("zig-kafka", lib_module);
+    sdk_tests.root_module.addImport("kafka_generated", kafka_generated);
 
-    const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_tests.step);
+    const run_sdk_tests = b.addRunArtifact(sdk_tests);
 
-    // Integration tests (requires running Kafka broker)
+    // SDK protocol tests
+    const protocol_tests = b.addTest(.{
+        .name = "protocol-tests",
+        .root_source_file = b.path("sdk/tests/protocol_tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    protocol_tests.root_module.addImport("kafka", kafka);
+    protocol_tests.root_module.addImport("kafka_generated", kafka_generated);
+
+    const run_protocol_tests = b.addRunArtifact(protocol_tests);
+
+    // SDK integration tests (requires running Kafka broker)
     const integration_tests = b.addTest(.{
-        .root_source_file = b.path("tests/integration_tests.zig"),
+        .name = "integration-tests",
+        .root_source_file = b.path("sdk/tests/integration_tests.zig"),
         .target = target,
         .optimize = optimize,
     });
-    integration_tests.root_module.addImport("zig-kafka", lib_module);
+    integration_tests.root_module.addImport("kafka", kafka);
+    integration_tests.root_module.addImport("kafka_generated", kafka_generated);
 
     const run_integration_tests = b.addRunArtifact(integration_tests);
-    const integration_test_step = b.step("test-integration", "Run integration tests (requires Kafka broker)");
+
+    // C API test executable
+    const c_test = b.addExecutable(.{
+        .name = "c-api-test",
+        .target = target,
+        .optimize = optimize,
+    });
+    c_test.addCSourceFile(.{
+        .file = b.path("c-compat/tests/c_api_test.c"),
+        .flags = &.{"-std=c11"},
+    });
+    c_test.linkLibrary(c_lib);
+    c_test.linkLibC();
+    c_test.addIncludePath(b.path("c-compat/include"));
+    b.installArtifact(c_test);
+
+    const run_c_test = b.addRunArtifact(c_test);
+    run_c_test.step.dependOn(b.getInstallStep());
+
+    // Test steps
+    const test_step = b.step("test", "Run all SDK tests");
+    test_step.dependOn(&run_sdk_tests.step);
+    test_step.dependOn(&run_protocol_tests.step);
+
+    const integration_test_step = b.step("test-integration", "Run integration tests (requires Kafka)");
     integration_test_step.dependOn(&run_integration_tests.step);
+
+    const c_test_step = b.step("test-c", "Run C API test");
+    c_test_step.dependOn(&run_c_test.step);
+
+    const all_tests_step = b.step("test-all", "Run all tests");
+    all_tests_step.dependOn(test_step);
+    all_tests_step.dependOn(c_test_step);
 }

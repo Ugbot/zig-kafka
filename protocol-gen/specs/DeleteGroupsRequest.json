@@ -1,0 +1,12 @@
+{
+  "apiKey": 42,
+  "type": "request",
+  "listeners": ["broker"],
+  "name": "DeleteGroupsRequest",
+  "validVersions": "0-2",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "GroupsNames", "type": "[]string", "versions": "0+", "entityType": "groupId",
+      "about": "The group names to delete." }
+  ]
+}

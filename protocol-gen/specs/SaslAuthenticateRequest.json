@@ -1,0 +1,12 @@
+{
+  "apiKey": 36,
+  "type": "request",
+  "listeners": ["broker", "controller"],
+  "name": "SaslAuthenticateRequest",
+  "validVersions": "0-2",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "AuthBytes", "type": "bytes", "versions": "0+",
+      "about": "The SASL authentication bytes from the client, as defined by the SASL mechanism." }
+  ]
+}

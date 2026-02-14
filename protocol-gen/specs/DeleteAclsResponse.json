@@ -1,0 +1,39 @@
+{
+  "apiKey": 31,
+  "type": "response",
+  "name": "DeleteAclsResponse",
+  "validVersions": "1-3",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "ThrottleTimeMs", "type": "int32", "versions": "0+",
+      "about": "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota." },
+    { "name": "FilterResults", "type": "[]DeleteAclsFilterResult", "versions": "0+",
+      "about": "The results for each filter.", "fields": [
+      { "name": "ErrorCode", "type": "int16", "versions": "0+",
+        "about": "The error code, or 0 if the filter succeeded." },
+      { "name": "ErrorMessage", "type": "string", "versions": "0+", "nullableVersions": "0+",
+        "about": "The error message, or null if the filter succeeded." },
+      { "name": "MatchingAcls", "type": "[]DeleteAclsMatchingAcl", "versions": "0+",
+        "about": "The ACLs which matched this filter.", "fields": [
+        { "name": "ErrorCode", "type": "int16", "versions": "0+",
+          "about": "The deletion error code, or 0 if the deletion succeeded." },
+        { "name": "ErrorMessage", "type": "string", "versions": "0+", "nullableVersions": "0+",
+          "about": "The deletion error message, or null if the deletion succeeded." },
+        { "name": "ResourceType", "type": "int8", "versions": "0+",
+          "about": "The ACL resource type." },
+        { "name": "ResourceName", "type": "string", "versions": "0+",
+          "about": "The ACL resource name." },
+        { "name": "PatternType", "type": "int8", "versions": "1+", "default": "3", "ignorable": false,
+          "about": "The ACL resource pattern type." },
+        { "name": "Principal", "type": "string", "versions": "0+",
+          "about": "The ACL principal." },
+        { "name": "Host", "type": "string", "versions": "0+",
+          "about": "The ACL host." },
+        { "name": "Operation", "type": "int8", "versions": "0+",
+          "about": "The ACL operation." },
+        { "name": "PermissionType", "type": "int8", "versions": "0+",
+          "about": "The ACL permission type." }
+      ]}
+    ]}
+  ]
+}

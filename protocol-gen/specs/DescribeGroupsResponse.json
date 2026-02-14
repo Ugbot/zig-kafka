@@ -1,0 +1,44 @@
+{
+  "apiKey": 15,
+  "type": "response",
+  "name": "DescribeGroupsResponse",
+  "validVersions": "0-6",
+  "flexibleVersions": "5+",
+  "fields": [
+    { "name": "ThrottleTimeMs", "type": "int32", "versions": "1+", "ignorable": true,
+      "about": "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota." },
+    { "name": "Groups", "type": "[]DescribedGroup", "versions": "0+",
+      "about": "Each described group.", "fields": [
+      { "name": "ErrorCode", "type": "int16", "versions": "0+",
+        "about": "The describe error, or 0 if there was no error." },
+      { "name": "ErrorMessage", "type": "string", "versions": "6+", "nullableVersions": "6+", "default": "null",
+        "about": "The describe error message, or null if there was no error." },
+      { "name": "GroupId", "type": "string", "versions": "0+", "entityType": "groupId",
+        "about": "The group ID string." },
+      { "name": "GroupState", "type": "string", "versions": "0+",
+        "about": "The group state string, or the empty string." },
+      { "name": "ProtocolType", "type": "string", "versions": "0+",
+        "about": "The group protocol type, or the empty string." },
+      { "name": "ProtocolData", "type": "string", "versions": "0+",
+        "about": "The group protocol data, or the empty string." },
+      { "name": "Members", "type": "[]DescribedGroupMember", "versions": "0+",
+        "about": "The group members.", "fields": [
+        { "name": "MemberId", "type": "string", "versions": "0+",
+          "about": "The member id." },
+        { "name": "GroupInstanceId", "type": "string", "versions": "4+", "ignorable": true,
+          "nullableVersions": "4+", "default": "null",
+          "about": "The unique identifier of the consumer instance provided by end user." },
+        { "name": "ClientId", "type": "string", "versions": "0+",
+          "about": "The client ID used in the member's latest join group request." },
+        { "name": "ClientHost", "type": "string", "versions": "0+",
+          "about": "The client host." },
+        { "name": "MemberMetadata", "type": "bytes", "versions": "0+",
+          "about": "The metadata corresponding to the current group protocol in use." },
+        { "name": "MemberAssignment", "type": "bytes", "versions": "0+",
+          "about": "The current assignment provided by the group leader." }
+      ]},
+      { "name": "AuthorizedOperations", "type": "int32", "versions": "3+",  "default": "-2147483648",
+        "about": "32-bit bitfield to represent authorized operations for this group." }
+    ]}
+  ]
+}

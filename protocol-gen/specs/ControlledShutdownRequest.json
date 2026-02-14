@@ -1,0 +1,6 @@
+{
+  "apiKey": 7,
+  "type": "request",
+  "name": "ControlledShutdownRequest",
+  "validVersions": "none"
+}

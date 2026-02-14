@@ -1,0 +1,16 @@
+{
+  "type": "header",
+  "name": "RequestHeader",
+  "validVersions": "1-2",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "RequestApiKey", "type": "int16", "versions": "0+",
+      "about": "The API key of this request." },
+    { "name": "RequestApiVersion", "type": "int16", "versions": "0+",
+      "about": "The API version of this request." },
+    { "name": "CorrelationId", "type": "int32", "versions": "0+",
+      "about": "The correlation ID of this request." },
+    { "name": "ClientId", "type": "string", "versions": "1+", "nullableVersions": "1+", "flexibleVersions": "none",
+      "about": "The client ID string." }
+  ]
+}

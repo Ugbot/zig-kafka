@@ -1,0 +1,591 @@
+const std = @import("std");
+const kafka = @import("kafka");
+const registry = @import("handle_registry.zig");
+const types = @import("types.zig");
+const error_mod = @import("error.zig");
+
+// Re-export error types
+pub const rd_kafka_resp_err_t = error_mod.rd_kafka_resp_err_t;
+pub const rd_kafka_err2str = error_mod.rd_kafka_err2str;
+pub const rd_kafka_err2name = error_mod.rd_kafka_err2name;
+pub const rd_kafka_last_error = error_mod.rd_kafka_last_error;
+
+// Re-export types
+pub const rd_kafka_type_t = types.rd_kafka_type_t;
+pub const rd_kafka_conf_res_t = types.rd_kafka_conf_res_t;
+pub const rd_kafka_message_t = types.rd_kafka_message_t;
+pub const rd_kafka_topic_partition_t = types.rd_kafka_topic_partition_t;
+pub const rd_kafka_topic_partition_list_t = types.rd_kafka_topic_partition_list_t;
+pub const rd_kafka_timestamp_type_t = types.rd_kafka_timestamp_type_t;
+
+// Global state
+var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+const allocator = gpa.allocator();
+var global_registry: registry.HandleRegistry = undefined;
+var registry_initialized = false;
+
+fn ensureRegistryInit() void {
+    if (!registry_initialized) {
+        global_registry = registry.HandleRegistry.init(allocator);
+        registry_initialized = true;
+    }
+}
+
+// Opaque types (for C API)
+pub const rd_kafka_t = opaque {};
+pub const rd_kafka_topic_t = opaque {};
+pub const rd_kafka_conf_t = opaque {};
+pub const rd_kafka_topic_conf_t = opaque {};
+pub const rd_kafka_headers_t = opaque {};
+pub const rd_kafka_queue_t = opaque {};
+
+//
+// Configuration API
+//
+
+export fn rd_kafka_conf_new() callconv(.C) ?*rd_kafka_conf_t {
+    ensureRegistryInit();
+
+    const config = allocator.create(registry.HandleRegistry.ConfigHandle) catch return null;
+    config.* = .{
+        .bootstrap_servers = null,
+        .client_id = null,
+        .settings = std.StringHashMap([]const u8).init(allocator),
+    };
+
+    const id = global_registry.register(.{ .config = config }) catch return null;
+    return @ptrFromInt(id);
+}
+
+export fn rd_kafka_conf_destroy(conf: ?*rd_kafka_conf_t) callconv(.C) void {
+    if (conf) |c| {
+        const id = @intFromPtr(c);
+        if (global_registry.remove(id)) |handle| {
+            if (handle == .config) {
+                handle.config.settings.deinit();
+                allocator.destroy(handle.config);
+            }
+        }
+    }
+}
+
+export fn rd_kafka_conf_set(
+    conf: ?*rd_kafka_conf_t,
+    name: [*:0]const u8,
+    value: [*:0]const u8,
+    errstr: [*]u8,
+    errstr_size: usize,
+) callconv(.C) types.rd_kafka_conf_res_t {
+    const id = @intFromPtr(conf orelse return .RD_KAFKA_CONF_INVALID);
+    const handle = global_registry.get(id, .config) orelse return .RD_KAFKA_CONF_INVALID;
+
+    const name_str = std.mem.span(name);
+    const value_str = std.mem.span(value);
+
+    // Known configuration parameters
+    if (std.mem.eql(u8, name_str, "bootstrap.servers")) {
+        handle.config.bootstrap_servers = allocator.dupe(u8, value_str) catch {
+            copyErrorString(errstr, errstr_size, "Memory allocation failed");
+            return .RD_KAFKA_CONF_INVALID;
+        };
+        return .RD_KAFKA_CONF_OK;
+    } else if (std.mem.eql(u8, name_str, "client.id")) {
+        handle.config.client_id = allocator.dupe(u8, value_str) catch {
+            copyErrorString(errstr, errstr_size, "Memory allocation failed");
+            return .RD_KAFKA_CONF_INVALID;
+        };
+        return .RD_KAFKA_CONF_OK;
+    }
+
+    // Store unknown configs for later
+    handle.config.settings.put(
+        allocator.dupe(u8, name_str) catch return .RD_KAFKA_CONF_INVALID,
+        allocator.dupe(u8, value_str) catch return .RD_KAFKA_CONF_INVALID,
+    ) catch return .RD_KAFKA_CONF_INVALID;
+
+    return .RD_KAFKA_CONF_OK;
+}
+
+export fn rd_kafka_conf_dup(conf: ?*const rd_kafka_conf_t) callconv(.C) ?*rd_kafka_conf_t {
+    const id = @intFromPtr(conf orelse return null);
+    const handle = global_registry.get(id, .config) orelse return null;
+
+    const new_config = allocator.create(registry.HandleRegistry.ConfigHandle) catch return null;
+    new_config.* = .{
+        .bootstrap_servers = if (handle.config.bootstrap_servers) |bs|
+            allocator.dupe(u8, bs) catch return null
+        else
+            null,
+        .client_id = if (handle.config.client_id) |ci|
+            allocator.dupe(u8, ci) catch return null
+        else
+            null,
+        .settings = handle.config.settings.clone() catch return null,
+    };
+
+    const new_id = global_registry.register(.{ .config = new_config }) catch {
+        new_config.settings.deinit();
+        allocator.destroy(new_config);
+        return null;
+    };
+
+    return @ptrFromInt(new_id);
+}
+
+//
+// Client lifecycle
+//
+
+export fn rd_kafka_new(
+    type_: types.rd_kafka_type_t,
+    conf: ?*rd_kafka_conf_t,
+    errstr: [*]u8,
+    errstr_size: usize,
+) callconv(.C) ?*rd_kafka_t {
+    ensureRegistryInit();
+
+    const config_id = @intFromPtr(conf orelse {
+        copyErrorString(errstr, errstr_size, "Configuration required");
+        return null;
+    });
+
+    const config_handle = global_registry.get(config_id, .config) orelse {
+        copyErrorString(errstr, errstr_size, "Invalid configuration");
+        return null;
+    };
+
+    // Create KafkaClient
+    const bootstrap = config_handle.config.bootstrap_servers orelse "localhost:9092";
+    var servers = std.ArrayList([]const u8).init(allocator);
+    var it = std.mem.splitScalar(u8, bootstrap, ',');
+    while (it.next()) |server| {
+        servers.append(allocator.dupe(u8, std.mem.trim(u8, server, " \t")) catch continue) catch continue;
+    }
+
+    const client = allocator.create(kafka.KafkaClient) catch {
+        copyErrorString(errstr, errstr_size, "Memory allocation failed");
+        return null;
+    };
+
+    client.* = kafka.KafkaClient.init(allocator, .{
+        .bootstrap_servers = servers.items,
+        .client_id = config_handle.config.client_id orelse "zig-kafka-c-compat",
+    }) catch |err| {
+        copyErrorString(errstr, errstr_size, @errorName(err));
+        allocator.destroy(client);
+        return null;
+    };
+
+    const client_handle = allocator.create(registry.HandleRegistry.ClientHandle) catch {
+        copyErrorString(errstr, errstr_size, "Memory allocation failed");
+        client.deinit();
+        allocator.destroy(client);
+        return null;
+    };
+
+    client_handle.* = .{
+        .client = client,
+        .type = if (type_ == .RD_KAFKA_PRODUCER) .producer else .consumer,
+    };
+
+    // Create producer or consumer
+    if (type_ == .RD_KAFKA_PRODUCER) {
+        const producer = client.createProducer(.{}) catch |err| {
+            copyErrorString(errstr, errstr_size, @errorName(err));
+            allocator.destroy(client_handle);
+            client.deinit();
+            allocator.destroy(client);
+            return null;
+        };
+        client_handle.producer = allocator.create(kafka.Producer) catch {
+            copyErrorString(errstr, errstr_size, "Memory allocation failed");
+            allocator.destroy(client_handle);
+            client.deinit();
+            allocator.destroy(client);
+            return null;
+        };
+        client_handle.producer.?.* = producer;
+    } else {
+        const group_id = config_handle.config.settings.get("group.id") orelse "default-group";
+        const consumer = client.createConsumer(.{
+            .group_id = group_id,
+        }) catch |err| {
+            copyErrorString(errstr, errstr_size, @errorName(err));
+            allocator.destroy(client_handle);
+            client.deinit();
+            allocator.destroy(client);
+            return null;
+        };
+        client_handle.consumer = allocator.create(kafka.Consumer) catch {
+            copyErrorString(errstr, errstr_size, "Memory allocation failed");
+            allocator.destroy(client_handle);
+            client.deinit();
+            allocator.destroy(client);
+            return null;
+        };
+        client_handle.consumer.?.* = consumer;
+    }
+
+    const id = global_registry.register(.{ .client = client_handle }) catch {
+        if (client_handle.producer) |p| {
+            p.close();
+            allocator.destroy(p);
+        }
+        if (client_handle.consumer) |c| {
+            c.close();
+            allocator.destroy(c);
+        }
+        allocator.destroy(client_handle);
+        client.deinit();
+        allocator.destroy(client);
+        return null;
+    };
+
+    return @ptrFromInt(id);
+}
+
+export fn rd_kafka_destroy(rk: ?*rd_kafka_t) callconv(.C) void {
+    if (rk) |r| {
+        const id = @intFromPtr(r);
+        if (global_registry.remove(id)) |handle| {
+            if (handle == .client) {
+                if (handle.client.producer) |p| {
+                    p.close();
+                    allocator.destroy(p);
+                }
+                if (handle.client.consumer) |c| {
+                    c.close();
+                    allocator.destroy(c);
+                }
+                handle.client.client.deinit();
+                allocator.destroy(handle.client.client);
+                allocator.destroy(handle.client);
+            }
+        }
+    }
+}
+
+export fn rd_kafka_name(rk: ?*const rd_kafka_t) callconv(.C) [*:0]const u8 {
+    const id = @intFromPtr(rk orelse return "unknown");
+    const handle = global_registry.get(id, .client) orelse return "unknown";
+    return handle.client.client.config.client_id.ptr;
+}
+
+export fn rd_kafka_type(rk: ?*const rd_kafka_t) callconv(.C) types.rd_kafka_type_t {
+    const id = @intFromPtr(rk orelse return .RD_KAFKA_PRODUCER);
+    const handle = global_registry.get(id, .client) orelse return .RD_KAFKA_PRODUCER;
+    return if (handle.client.type == .producer) .RD_KAFKA_PRODUCER else .RD_KAFKA_CONSUMER;
+}
+
+//
+// Topic API
+//
+
+export fn rd_kafka_topic_new(
+    rk: ?*rd_kafka_t,
+    topic: [*:0]const u8,
+    conf: ?*rd_kafka_topic_conf_t,
+) callconv(.C) ?*rd_kafka_topic_t {
+    _ = conf; // Topic conf not used yet
+
+    const client_id = @intFromPtr(rk orelse return null);
+    if (!global_registry.contains(client_id)) return null;
+
+    const topic_str = std.mem.span(topic);
+    const topic_handle = allocator.create(registry.HandleRegistry.TopicHandle) catch return null;
+    topic_handle.* = .{
+        .name = allocator.dupe(u8, topic_str) catch {
+            allocator.destroy(topic_handle);
+            return null;
+        },
+        .client_id = client_id,
+    };
+
+    const id = global_registry.register(.{ .topic = topic_handle }) catch {
+        allocator.free(topic_handle.name);
+        allocator.destroy(topic_handle);
+        return null;
+    };
+
+    return @ptrFromInt(id);
+}
+
+export fn rd_kafka_topic_destroy(rkt: ?*rd_kafka_topic_t) callconv(.C) void {
+    if (rkt) |t| {
+        const id = @intFromPtr(t);
+        if (global_registry.remove(id)) |handle| {
+            if (handle == .topic) {
+                allocator.free(handle.topic.name);
+                allocator.destroy(handle.topic);
+            }
+        }
+    }
+}
+
+export fn rd_kafka_topic_name(rkt: ?*const rd_kafka_topic_t) callconv(.C) [*:0]const u8 {
+    const id = @intFromPtr(rkt orelse return "unknown");
+    const handle = global_registry.get(id, .topic) orelse return "unknown";
+    return handle.topic.name.ptr;
+}
+
+//
+// Producer API
+//
+
+export fn rd_kafka_produce(
+    rkt: ?*rd_kafka_topic_t,
+    partition: i32,
+    msgflags: c_int,
+    payload: ?*anyopaque,
+    len: usize,
+    key: ?*const anyopaque,
+    keylen: usize,
+    msg_opaque: ?*anyopaque,
+) callconv(.C) c_int {
+    _ = msgflags;
+    _ = msg_opaque;
+
+    const topic_id = @intFromPtr(rkt orelse return -1);
+    const topic_handle = global_registry.get(topic_id, .topic) orelse return -1;
+
+    const client_id = topic_handle.topic.client_id;
+    const client_handle = global_registry.get(client_id, .client) orelse return -1;
+
+    const producer = client_handle.client.producer orelse return -1;
+
+    const value_slice = if (payload) |p|
+        @as([*]const u8, @ptrCast(p))[0..len]
+    else
+        &[_]u8{};
+
+    const key_slice = if (key) |k|
+        @as([*]const u8, @ptrCast(k))[0..keylen]
+    else
+        null;
+
+    producer.send(.{
+        .topic = topic_handle.topic.name,
+        .partition = partition,
+        .key = key_slice,
+        .value = value_slice,
+    }) catch return -1;
+
+    return 0;
+}
+
+export fn rd_kafka_producev(
+    rk: ?*rd_kafka_t,
+    // Varargs handled separately
+) callconv(.C) c_int {
+    _ = rk;
+    // TODO: Implement varargs version
+    return -1;
+}
+
+export fn rd_kafka_flush(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.C) c_int {
+    const id = @intFromPtr(rk orelse return -1);
+    const handle = global_registry.get(id, .client) orelse return -1;
+
+    if (handle.client.producer) |producer| {
+        producer.flush(@intCast(timeout_ms)) catch return -1;
+        return 0;
+    }
+
+    return -1;
+}
+
+export fn rd_kafka_poll(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.C) c_int {
+    _ = rk;
+    _ = timeout_ms;
+    // Poll for delivery reports and other events
+    // TODO: Implement event queue
+    return 0;
+}
+
+//
+// Consumer API
+//
+
+export fn rd_kafka_subscribe(
+    rk: ?*rd_kafka_t,
+    topics: ?*const types.rd_kafka_topic_partition_list_t,
+) callconv(.C) c_int {
+    const id = @intFromPtr(rk orelse return -1);
+    const handle = global_registry.get(id, .client) orelse return -1;
+
+    const consumer = handle.client.consumer orelse return -1;
+    const topic_list = topics orelse return -1;
+
+    var topic_names = std.ArrayList([]const u8).init(allocator);
+    defer topic_names.deinit();
+
+    var i: usize = 0;
+    while (i < topic_list.cnt) : (i += 1) {
+        const topic_name = std.mem.span(topic_list.elems[i].topic);
+        topic_names.append(topic_name) catch return -1;
+    }
+
+    consumer.subscribe(topic_names.items) catch return -1;
+    return 0;
+}
+
+export fn rd_kafka_consumer_poll(
+    rk: ?*rd_kafka_t,
+    timeout_ms: c_int,
+) callconv(.C) ?*types.rd_kafka_message_t {
+    const id = @intFromPtr(rk orelse return null);
+    const handle = global_registry.get(id, .client) orelse return null;
+
+    const consumer = handle.client.consumer orelse return null;
+
+    const records = consumer.poll(@intCast(timeout_ms)) catch return null;
+    if (records.len == 0) return null;
+
+    // Allocate message structure
+    const msg = allocator.create(types.rd_kafka_message_t) catch return null;
+    const record = records[0];
+
+    msg.* = .{
+        .err = 0,
+        .rkt = null,
+        .partition = record.partition,
+        .payload = @constCast(record.value.ptr),
+        .len = record.value.len,
+        .key = if (record.key) |k| k.ptr else null,
+        .key_len = if (record.key) |k| k.len else 0,
+        .offset = record.offset,
+        ._private = null,
+    };
+
+    return msg;
+}
+
+export fn rd_kafka_message_destroy(rkmessage: ?*types.rd_kafka_message_t) callconv(.C) void {
+    if (rkmessage) |msg| {
+        allocator.destroy(msg);
+    }
+}
+
+export fn rd_kafka_consumer_close(rk: ?*rd_kafka_t) callconv(.C) c_int {
+    const id = @intFromPtr(rk orelse return -1);
+    const handle = global_registry.get(id, .client) orelse return -1;
+
+    if (handle.client.consumer) |consumer| {
+        consumer.close();
+        return 0;
+    }
+
+    return -1;
+}
+
+export fn rd_kafka_assignment(
+    rk: ?*rd_kafka_t,
+    partitions: ?*?*types.rd_kafka_topic_partition_list_t,
+) callconv(.C) c_int {
+    _ = rk;
+    _ = partitions;
+    // TODO: Implement
+    return -1;
+}
+
+export fn rd_kafka_committed(
+    rk: ?*rd_kafka_t,
+    partitions: ?*types.rd_kafka_topic_partition_list_t,
+    timeout_ms: c_int,
+) callconv(.C) c_int {
+    _ = rk;
+    _ = partitions;
+    _ = timeout_ms;
+    // TODO: Implement
+    return -1;
+}
+
+export fn rd_kafka_commit(
+    rk: ?*rd_kafka_t,
+    offsets: ?*types.rd_kafka_topic_partition_list_t,
+    async_: c_int,
+) callconv(.C) c_int {
+    _ = rk;
+    _ = offsets;
+    _ = async_;
+    // TODO: Implement
+    return -1;
+}
+
+//
+// Topic Partition List API
+//
+
+export fn rd_kafka_topic_partition_list_new(size: c_int) callconv(.C) ?*types.rd_kafka_topic_partition_list_t {
+    const list = allocator.create(types.rd_kafka_topic_partition_list_t) catch return null;
+    const elems = allocator.alloc(types.rd_kafka_topic_partition_t, @intCast(size)) catch {
+        allocator.destroy(list);
+        return null;
+    };
+
+    list.* = .{
+        .cnt = 0,
+        .size = size,
+        .elems = elems.ptr,
+    };
+
+    return list;
+}
+
+export fn rd_kafka_topic_partition_list_destroy(rkparlist: ?*types.rd_kafka_topic_partition_list_t) callconv(.C) void {
+    if (rkparlist) |list| {
+        const elems = list.elems[0..@intCast(list.size)];
+        allocator.free(elems);
+        allocator.destroy(list);
+    }
+}
+
+export fn rd_kafka_topic_partition_list_add(
+    rktparlist: ?*types.rd_kafka_topic_partition_list_t,
+    topic: [*:0]const u8,
+    partition: i32,
+) callconv(.C) ?*types.rd_kafka_topic_partition_t {
+    const list = rktparlist orelse return null;
+    if (list.cnt >= list.size) return null;
+
+    const topic_str = std.mem.span(topic);
+    const topic_copy = allocator.dupeZ(u8, topic_str) catch return null;
+
+    const idx: usize = @intCast(list.cnt);
+    list.elems[idx] = .{
+        .topic = topic_copy.ptr,
+        .partition = partition,
+        .offset = types.RD_KAFKA_OFFSET_INVALID,
+        .metadata = null,
+        .metadata_size = 0,
+        .@"opaque" = null,
+        .err = 0,
+        ._private = null,
+    };
+
+    list.cnt += 1;
+    return &list.elems[idx];
+}
+
+//
+// Helper functions
+//
+
+fn copyErrorString(dest: [*]u8, size: usize, src: []const u8) void {
+    if (size == 0) return;
+    const copy_len = @min(src.len, size - 1);
+    @memcpy(dest[0..copy_len], src[0..copy_len]);
+    dest[copy_len] = 0; // Null terminate
+}
+
+//
+// Version info
+//
+
+export fn rd_kafka_version() callconv(.C) c_int {
+    return 0x020d00ff; // 2.13.0
+}
+
+export fn rd_kafka_version_str() callconv(.C) [*:0]const u8 {
+    return "2.13.0-zig-kafka";
+}

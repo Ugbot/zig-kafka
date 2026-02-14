@@ -1,0 +1,38 @@
+{
+  "apiKey": 84,
+  "type": "response",
+  "name": "ReadShareGroupStateResponse",
+  "validVersions": "0",
+  "flexibleVersions": "0+",
+  "fields": [
+    { "name": "Results", "type": "[]ReadStateResult", "versions": "0+",
+      "about": "The read results.", "fields": [
+      { "name": "TopicId", "type": "uuid", "versions": "0+",
+        "about": "The topic identifier." },
+      { "name": "Partitions", "type": "[]PartitionResult", "versions": "0+",
+        "about" : "The results for the partitions.", "fields": [
+        { "name": "Partition", "type": "int32", "versions": "0+",
+          "about": "The partition index." },
+        { "name": "ErrorCode", "type": "int16", "versions": "0+",
+          "about": "The error code, or 0 if there was no error." },
+        { "name": "ErrorMessage", "type": "string", "versions": "0+", "nullableVersions": "0+", "default": "null",
+          "about": "The error message, or null if there was no error." },
+        { "name": "StateEpoch", "type": "int32", "versions": "0+",
+          "about": "The state epoch of the share-partition." },
+        { "name": "StartOffset", "type": "int64", "versions": "0+",
+          "about": "The share-partition start offset, which can be -1 if it is not yet initialized." },
+        { "name": "StateBatches", "type": "[]StateBatch", "versions": "0+",
+          "about": "The state batches for this share-partition.", "fields":[
+          { "name": "FirstOffset", "type": "int64", "versions": "0+",
+            "about": "The first offset of this state batch." },
+          { "name": "LastOffset", "type": "int64", "versions": "0+",
+            "about": "The last offset of this state batch." },
+          { "name": "DeliveryState", "type": "int8", "versions": "0+",
+            "about": "The delivery state - 0:Available,2:Acked,4:Archived." },
+          { "name": "DeliveryCount", "type": "int16", "versions": "0+",
+            "about": "The delivery count." }
+        ]}
+      ]}
+    ]}
+  ]
+}

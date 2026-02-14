@@ -1,0 +1,29 @@
+{
+  "apiKey": 2,
+  "type": "response",
+  "name": "ListOffsetsResponse",
+  "validVersions": "1-11",
+  "flexibleVersions": "6+",
+  "fields": [
+    { "name": "ThrottleTimeMs", "type": "int32", "versions": "2+", "ignorable": true,
+      "about": "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota." },
+    { "name": "Topics", "type": "[]ListOffsetsTopicResponse", "versions": "0+",
+      "about": "Each topic in the response.", "fields": [
+      { "name": "Name", "type": "string", "versions": "0+", "entityType": "topicName",
+        "about": "The topic name." },
+      { "name": "Partitions", "type": "[]ListOffsetsPartitionResponse", "versions": "0+",
+        "about": "Each partition in the response.", "fields": [
+        { "name": "PartitionIndex", "type": "int32", "versions": "0+",
+          "about": "The partition index." },
+        { "name": "ErrorCode", "type": "int16", "versions": "0+",
+          "about": "The partition error code, or 0 if there was no error." },
+        { "name": "Timestamp", "type": "int64", "versions": "1+", "default": "-1", "ignorable": false,
+          "about": "The timestamp associated with the returned offset." },
+        { "name": "Offset", "type": "int64", "versions": "1+", "default": "-1", "ignorable": false,
+          "about": "The returned offset." },
+        { "name": "LeaderEpoch", "type": "int32", "versions": "4+", "default": "-1",
+          "about": "The leader epoch associated with the returned offset."}
+      ]}
+    ]}
+  ]
+}

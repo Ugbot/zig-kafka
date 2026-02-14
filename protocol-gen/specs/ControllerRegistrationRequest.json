@@ -1,0 +1,36 @@
+{
+  "apiKey": 70,
+  "type": "request",
+  "listeners": ["controller"],
+  "name": "ControllerRegistrationRequest",
+  "validVersions": "0",
+  "flexibleVersions": "0+",
+  "fields": [
+    { "name": "ControllerId", "type": "int32", "versions": "0+",
+      "about": "The ID of the controller to register." },
+    { "name": "IncarnationId", "type": "uuid", "versions": "0+",
+      "about": "The controller incarnation ID, which is unique to each process run." },
+    { "name": "ZkMigrationReady", "type": "bool", "versions": "0+",
+      "about": "Set if the required configurations for ZK migration are present." },
+    { "name": "Listeners", "type": "[]Listener",
+      "about": "The listeners of this controller.", "versions": "0+", "fields": [
+      { "name": "Name", "type": "string", "versions": "0+", "mapKey": true,
+        "about": "The name of the endpoint." },
+      { "name": "Host", "type": "string", "versions": "0+",
+        "about": "The hostname." },
+      { "name": "Port", "type": "uint16", "versions": "0+",
+        "about": "The port." },
+      { "name": "SecurityProtocol", "type": "int16", "versions": "0+",
+        "about": "The security protocol." }
+    ]},
+    { "name": "Features", "type": "[]Feature",
+      "about": "The features on this controller.", "versions": "0+", "fields": [
+      { "name": "Name", "type": "string", "versions": "0+", "mapKey": true,
+        "about": "The feature name." },
+      { "name": "MinSupportedVersion", "type": "int16", "versions": "0+",
+        "about": "The minimum supported feature level." },
+      { "name": "MaxSupportedVersion", "type": "int16", "versions": "0+",
+        "about": "The maximum supported feature level." }
+    ]}
+  ]
+}

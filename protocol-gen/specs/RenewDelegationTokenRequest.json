@@ -1,0 +1,14 @@
+{
+  "apiKey": 39,
+  "type": "request",
+  "listeners": ["broker", "controller"],
+  "name": "RenewDelegationTokenRequest",
+  "validVersions": "1-2",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "Hmac", "type": "bytes", "versions": "0+",
+      "about": "The HMAC of the delegation token to be renewed." },
+    { "name": "RenewPeriodMs", "type": "int64", "versions": "0+",
+      "about": "The renewal time period in milliseconds." }
+  ]
+}

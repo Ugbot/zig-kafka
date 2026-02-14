@@ -1,0 +1,12 @@
+{
+  "apiKey": 17,
+  "type": "request",
+  "listeners": ["broker", "controller"],
+  "name": "SaslHandshakeRequest",
+  "validVersions": "0-1",
+  "flexibleVersions": "none",
+  "fields": [
+    { "name": "Mechanism", "type": "string", "versions": "0+",
+      "about": "The SASL mechanism chosen by the client." }
+  ]
+}

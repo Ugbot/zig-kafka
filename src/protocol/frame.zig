@@ -6,8 +6,9 @@
 // Legacy Frame/Body/Header types kept for backward compatibility during migration.
 
 const std = @import("std");
-const types = @import("src/types.zig");
-const GeneratedResponseHeader = @import("../generated/response_header.zig").ResponseHeader;
+const kafka_gen = @import("kafka_generated");
+const types = kafka_gen.types;
+const GeneratedResponseHeader = kafka_gen.response_header.ResponseHeader;
 
 // ============================================================================
 // Response Framing (used by handlers with generated types)
@@ -196,20 +197,20 @@ pub const Header = union(enum) {
 
 /// Message body union (legacy — used by fetch.zig)
 pub const Body = union(enum) {
-    fetch_request: @import("../generated/fetch_request.zig").FetchRequest,
-    produce_request: @import("../generated/produce_request.zig").ProduceRequest,
+    fetch_request: kafka_gen.fetch_request.FetchRequest,
+    produce_request: kafka_gen.produce_request.ProduceRequest,
     metadata_request: @import("../generated/metadata_request.zig").MetadataRequest,
     api_versions_request: @import("../generated/api_versions_request.zig").ApiVersionsRequest,
 
-    fetch_response: @import("../generated/fetch_response.zig").FetchResponse,
+    fetch_response: kafka_gen.fetch_response.FetchResponse,
     produce_response: @import("../generated/produce_response.zig").ProduceResponse,
     metadata_response: @import("../generated/metadata_response.zig").MetadataResponse,
     api_versions_response: @import("../generated/api_versions_response.zig").ApiVersionsResponse,
 
     pub fn decodeRequest(reader: anytype, api_key: i16, api_version: i16, allocator: std.mem.Allocator) !Body {
         return switch (api_key) {
-            1 => .{ .fetch_request = try @import("../generated/fetch_request.zig").FetchRequest.decode(reader, api_version, allocator) },
-            0 => .{ .produce_request = try @import("../generated/produce_request.zig").ProduceRequest.decode(reader, api_version, allocator) },
+            1 => .{ .fetch_request = try kafka_gen.fetch_request.FetchRequest.decode(reader, api_version, allocator) },
+            0 => .{ .produce_request = try kafka_gen.produce_request.ProduceRequest.decode(reader, api_version, allocator) },
             3 => .{ .metadata_request = try @import("../generated/metadata_request.zig").MetadataRequest.decode(reader, api_version, allocator) },
             18 => .{ .api_versions_request = try @import("../generated/api_versions_request.zig").ApiVersionsRequest.decode(reader, api_version, allocator) },
             else => return error.UnknownApiKey,

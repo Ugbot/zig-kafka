@@ -1,0 +1,6 @@
+{
+  "apiKey": 5,
+  "type": "request",
+  "name": "StopReplicaRequest",
+  "validVersions": "none"
+}

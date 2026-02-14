@@ -1,0 +1,20 @@
+{
+  "apiKey": 74,
+  "type": "response",
+  "name": "ListConfigResourcesResponse",
+  "validVersions": "0-1",
+  "flexibleVersions": "0+",
+  "fields": [
+      { "name": "ThrottleTimeMs", "type": "int32", "versions": "0+",
+        "about": "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota." },
+      { "name": "ErrorCode", "type": "int16", "versions": "0+",
+        "about": "The error code, or 0 if there was no error." },
+      { "name": "ConfigResources", "type": "[]ConfigResource", "versions": "0+",
+        "about": "Each config resource in the response.", "fields": [
+        { "name": "ResourceName", "type": "string", "versions": "0+",
+          "about": "The resource name." },
+        { "name": "ResourceType", "type": "int8", "versions": "1+", "ignorable": true, "default": 16,
+          "about": "The resource type." }
+    ]}
+  ]
+}

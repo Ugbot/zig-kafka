@@ -1,0 +1,24 @@
+{
+  "apiKey": 29,
+  "type": "request",
+  "listeners": ["broker", "controller"],
+  "name": "DescribeAclsRequest",
+  "validVersions": "1-3",
+  "flexibleVersions": "2+",
+  "fields": [
+    { "name": "ResourceTypeFilter", "type": "int8", "versions": "0+",
+      "about": "The resource type." },
+    { "name": "ResourceNameFilter", "type": "string", "versions": "0+", "nullableVersions": "0+",
+      "about": "The resource name, or null to match any resource name." },
+    { "name": "PatternTypeFilter", "type": "int8", "versions": "1+", "default": "3", "ignorable": false,
+      "about": "The resource pattern to match." },
+    { "name": "PrincipalFilter", "type": "string", "versions": "0+", "nullableVersions": "0+",
+      "about": "The principal to match, or null to match any principal." },
+    { "name": "HostFilter", "type": "string", "versions": "0+", "nullableVersions": "0+",
+      "about": "The host to match, or null to match any host." },
+    { "name": "Operation", "type": "int8", "versions": "0+",
+      "about": "The operation to match." },
+    { "name": "PermissionType", "type": "int8", "versions": "0+",
+      "about": "The permission type to match." }
+  ]
+}

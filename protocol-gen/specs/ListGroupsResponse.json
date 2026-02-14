@@ -1,0 +1,24 @@
+{
+  "apiKey": 16,
+  "type": "response",
+  "name": "ListGroupsResponse",
+  "validVersions": "0-5",
+  "flexibleVersions": "3+",
+  "fields": [
+    { "name": "ThrottleTimeMs", "type": "int32", "versions": "1+", "ignorable": true,
+      "about": "The duration in milliseconds for which the request was throttled due to a quota violation, or zero if the request did not violate any quota." },
+    { "name": "ErrorCode", "type": "int16", "versions": "0+",
+      "about": "The error code, or 0 if there was no error." },
+    { "name": "Groups", "type": "[]ListedGroup", "versions": "0+",
+      "about": "Each group in the response.", "fields": [
+      { "name": "GroupId", "type": "string", "versions": "0+", "entityType": "groupId",
+        "about": "The group ID." },
+      { "name": "ProtocolType", "type": "string", "versions": "0+",
+        "about": "The group protocol type." },
+      { "name": "GroupState", "type": "string", "versions": "4+", "ignorable": true,
+        "about": "The group state name." },
+      { "name": "GroupType", "type": "string", "versions": "5+", "ignorable": true,
+        "about": "The group type name." }
+    ]}
+  ]
+}

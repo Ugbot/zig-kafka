@@ -1,0 +1,13 @@
+{
+  "apiKey": 74,
+  "type": "request",
+  "listeners": ["broker"],
+  "name": "ListConfigResourcesRequest",
+  "validVersions": "0-1",
+  "flexibleVersions": "0+",
+  "fields": [
+    { "name": "ResourceTypes", "type": "[]int8", "versions": "1+",
+      "about": "The list of resource type. If the list is empty, it uses default supported config resource types."
+    }
+  ]
+}
