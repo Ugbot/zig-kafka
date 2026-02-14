@@ -1,0 +1,15 @@
+.{
+    .name = .kafka,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.14.1",
+    .fingerprint = 0x5bbc7517fb52961a,
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "tests",
+        "LICENSE",
+        "README.md",
+    },
+}
