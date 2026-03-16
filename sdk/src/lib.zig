@@ -80,6 +80,12 @@ pub const client = struct {
     pub const KafkaAdmin = @import("client/admin/admin.zig").KafkaAdmin;
 };
 
+// Re-export config types for c-compat and external users
+pub const ClientConfig = @import("client/config.zig").ClientConfig;
+pub const ProducerConfig = @import("client/config.zig").ProducerConfig;
+pub const ConsumerConfig = @import("client/config.zig").ConsumerConfig;
+pub const BrokerAddress = @import("client/config.zig").BrokerAddress;
+
 // Re-export commonly used types for convenience
 pub const KafkaClient = client.KafkaClient;
 pub const Producer = client.KafkaProducer;

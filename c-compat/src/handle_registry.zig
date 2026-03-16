@@ -34,6 +34,8 @@ pub const HandleRegistry = struct {
         type: ClientType,
         producer: ?*kafka.Producer = null,
         consumer: ?*kafka.Consumer = null,
+        name_z: [:0]const u8 = "zig-kafka",
+        broker_addresses: ?[]const kafka.BrokerAddress = null,
     };
 
     pub const ClientType = enum {
@@ -42,7 +44,7 @@ pub const HandleRegistry = struct {
     };
 
     pub const TopicHandle = struct {
-        name: []const u8,
+        name: [:0]const u8,
         client_id: usize,
     };
 
