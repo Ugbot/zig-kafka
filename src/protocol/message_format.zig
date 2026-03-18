@@ -52,7 +52,7 @@ fn parseMessageSetV0V1(allocator: mem.Allocator, data: []const u8) ![]TickStream
     if (data.len < 14) return error.InvalidMessageSet; // Minimum: Offset(8) + MessageSize(4) + CRC(4) + Magic(1) + Attributes(1)
 
     var pos: usize = 0;
-    var messages = std.ArrayList(TickStreamMessage).init(allocator);
+    var messages = std.array_list.Managed(TickStreamMessage).init(allocator);
     errdefer messages.deinit();
 
     // Parse MessageSet header
@@ -125,7 +125,7 @@ fn parseRecordBatchV2(allocator: mem.Allocator, data: []const u8) ![]TickStreamM
     if (data.len < 61) return error.InvalidRecordBatch; // Minimum RecordBatch header size
 
     var pos: usize = 0;
-    var messages = std.ArrayList(TickStreamMessage).init(allocator);
+    var messages = std.array_list.Managed(TickStreamMessage).init(allocator);
     errdefer messages.deinit();
 
     // Parse RecordBatch header

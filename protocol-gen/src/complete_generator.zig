@@ -4,7 +4,7 @@
 const std = @import("std");
 const json = std.json;
 const fs = std.fs;
-const ArrayList = std.ArrayList;
+const ArrayList = std.array_list.Managed;
 const Allocator = std.mem.Allocator;
 
 /// Field specification from JSON
@@ -891,7 +891,7 @@ fn generateDecodeFunction(output: *ArrayList(u8), spec: MessageSpec, allocator: 
         \\
         \\        if (is_flexible) {
         \\            const num_tagged_fields = try types.decodeUnsignedVarInt(reader);
-        \\            var unknown_tagged_fields = std.ArrayList(types.TaggedField).init(allocator);
+        \\            var unknown_tagged_fields = std.array_list.Managed(types.TaggedField).init(allocator);
         \\
         \\            var i: u32 = 0;
         \\            while (i < num_tagged_fields) : (i += 1) {

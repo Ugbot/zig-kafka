@@ -539,6 +539,7 @@ test "KafkaConsumer close" {
     var consumer = try KafkaConsumer.init(&client, .{
         .group_id = null,
     }, allocator);
+    defer consumer.deinit();
 
     try std.testing.expect(!consumer.closed);
 

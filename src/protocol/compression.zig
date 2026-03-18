@@ -203,7 +203,7 @@ pub fn decompressGzip(allocator: mem.Allocator, compressed: []const u8) ![]u8 {
     var stream = std.io.fixedBufferStream(compressed);
     var decompressor = std.compress.gzip.decompressor(stream.reader());
 
-    var output = std.ArrayList(u8).init(allocator);
+    var output = std.array_list.Managed(u8).init(allocator);
     errdefer output.deinit();
 
     // Read all decompressed data

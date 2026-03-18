@@ -94,7 +94,7 @@ pub const OffsetManager = struct {
         req.member_id = self.member_id;
 
         // Group partitions by topic
-        var topic_map = std.StringHashMap(std.ArrayList(OffsetCommitRequestPartition)).init(self.allocator);
+        var topic_map = std.StringHashMap(std.array_list.Managed(OffsetCommitRequestPartition)).init(self.allocator);
         defer {
             var it = topic_map.iterator();
             while (it.next()) |entry| {
@@ -112,7 +112,7 @@ pub const OffsetManager = struct {
             // Get or create topic entry
             const gop = try topic_map.getOrPut(topic_name);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(OffsetCommitRequestPartition).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(OffsetCommitRequestPartition).init(self.allocator);
             }
 
             // Add partition
@@ -124,7 +124,7 @@ pub const OffsetManager = struct {
         }
 
         // Build topics array
-        var topics_list = std.ArrayList(OffsetCommitRequestTopic).init(self.allocator);
+        var topics_list = std.array_list.Managed(OffsetCommitRequestTopic).init(self.allocator);
         defer topics_list.deinit();
 
         var it = topic_map.iterator();
@@ -209,7 +209,7 @@ pub const OffsetManager = struct {
         req.member_id = self.member_id;
 
         // Group by topic
-        var topic_map = std.StringHashMap(std.ArrayList(OffsetCommitRequestPartition)).init(self.allocator);
+        var topic_map = std.StringHashMap(std.array_list.Managed(OffsetCommitRequestPartition)).init(self.allocator);
         defer {
             var it = topic_map.iterator();
             while (it.next()) |entry| {
@@ -221,7 +221,7 @@ pub const OffsetManager = struct {
         for (offsets) |offset| {
             const gop = try topic_map.getOrPut(offset.topic);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(OffsetCommitRequestPartition).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(OffsetCommitRequestPartition).init(self.allocator);
             }
 
             try gop.value_ptr.append(.{
@@ -231,7 +231,7 @@ pub const OffsetManager = struct {
             });
         }
 
-        var topics_list = std.ArrayList(OffsetCommitRequestTopic).init(self.allocator);
+        var topics_list = std.array_list.Managed(OffsetCommitRequestTopic).init(self.allocator);
         defer topics_list.deinit();
 
         var it = topic_map.iterator();
@@ -308,7 +308,7 @@ pub const OffsetManager = struct {
         req.group_id = self.group_id;
 
         // Group assigned partitions by topic
-        var topic_map = std.StringHashMap(std.ArrayList(i32)).init(self.allocator);
+        var topic_map = std.StringHashMap(std.array_list.Managed(i32)).init(self.allocator);
         defer {
             var it = topic_map.iterator();
             while (it.next()) |entry| {
@@ -323,14 +323,14 @@ pub const OffsetManager = struct {
             const topic_name = part.topic[0..part.topic_len];
             const gop = try topic_map.getOrPut(topic_name);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(i32).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(i32).init(self.allocator);
             }
 
             try gop.value_ptr.append(part.partition);
         }
 
         // Build topics array
-        var topics_list = std.ArrayList(OffsetFetchRequestTopic).init(self.allocator);
+        var topics_list = std.array_list.Managed(OffsetFetchRequestTopic).init(self.allocator);
         defer topics_list.deinit();
 
         var it = topic_map.iterator();

@@ -22,14 +22,18 @@ pub fn build(b: *std.Build) void {
     kafka.addImport("kafka_generated", kafka_generated);
 
     // Create shared library (librdkafka.so / .dylib / .dll)
-    const c_lib = b.addSharedLibrary(.{
-        .name = "rdkafka",
+    const c_module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    c_module.addImport("kafka", kafka);
+
+    const c_lib = b.addSharedLibrary(.{
+        .name = "rdkafka",
+        .root_module = c_module,
         .version = .{ .major = 2, .minor = 13, .patch = 0 },
     });
-    c_lib.root_module.addImport("kafka", kafka);
     c_lib.linkLibC();
 
     // Install library
@@ -45,8 +49,10 @@ pub fn build(b: *std.Build) void {
     // Create a test executable that uses the C API
     const c_test = b.addExecutable(.{
         .name = "c-api-test",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     c_test.addCSourceFile(.{
         .file = b.path("tests/c_api_test.c"),

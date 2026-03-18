@@ -63,7 +63,7 @@ pub const HandleRegistry = struct {
     };
 
     pub const TopicPartitionList = struct {
-        partitions: std.ArrayList(TopicPartition),
+        partitions: std.array_list.Managed(TopicPartition),
 
         pub const TopicPartition = struct {
             topic: []const u8,
@@ -75,7 +75,7 @@ pub const HandleRegistry = struct {
     };
 
     pub const Headers = struct {
-        headers: std.ArrayList(Header),
+        headers: std.array_list.Managed(Header),
 
         pub const Header = struct {
             key: []const u8,
@@ -84,7 +84,7 @@ pub const HandleRegistry = struct {
     };
 
     pub const Queue = struct {
-        messages: std.ArrayList(usize), // message handle IDs
+        messages: std.array_list.Managed(usize), // message handle IDs
     };
 
     pub const ErrorObject = struct {

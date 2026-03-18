@@ -88,7 +88,7 @@ pub const Frame = struct {
         allocator: std.mem.Allocator,
     ) ![]const u8 {
         _ = api_key;
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         const writer = buffer.writer();
 
         try types.encodeInt32(writer, 0);

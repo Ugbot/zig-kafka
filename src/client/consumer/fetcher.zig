@@ -135,7 +135,7 @@ pub const Fetcher = struct {
         self.record_count = 0;
 
         // Group assigned partitions by leader broker
-        var broker_partitions = std.AutoHashMap(i32, std.ArrayList(PartitionToFetch)).init(self.allocator);
+        var broker_partitions = std.AutoHashMap(i32, std.array_list.Managed(PartitionToFetch)).init(self.allocator);
         defer {
             var it = broker_partitions.iterator();
             while (it.next()) |entry| {
@@ -164,7 +164,7 @@ pub const Fetcher = struct {
             // Add to broker's partition list
             const gop = try broker_partitions.getOrPut(leader_id);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(PartitionToFetch).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(PartitionToFetch).init(self.allocator);
             }
 
             try gop.value_ptr.append(.{
@@ -230,7 +230,7 @@ pub const Fetcher = struct {
         req.min_bytes = self.fetch_min_bytes;
 
         // Group partitions by topic
-        var topic_map = std.StringHashMap(std.ArrayList(FetchPartition)).init(self.allocator);
+        var topic_map = std.StringHashMap(std.array_list.Managed(FetchPartition)).init(self.allocator);
         defer {
             var it = topic_map.iterator();
             while (it.next()) |entry| {
@@ -244,7 +244,7 @@ pub const Fetcher = struct {
 
             const gop = try topic_map.getOrPut(part.topic);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(FetchPartition).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(FetchPartition).init(self.allocator);
             }
 
             try gop.value_ptr.append(.{
@@ -255,7 +255,7 @@ pub const Fetcher = struct {
         }
 
         // Build topics array
-        var topics_list = std.ArrayList(FetchTopic).init(self.allocator);
+        var topics_list = std.array_list.Managed(FetchTopic).init(self.allocator);
         defer topics_list.deinit();
 
         var it = topic_map.iterator();

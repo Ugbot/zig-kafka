@@ -135,7 +135,7 @@ pub const ProducerIdManager = struct {
 
 test "ProducerIdManager init" {
     var pool = BrokerPool.init(std.testing.allocator);
-    defer pool.deinit();
+    defer pool.closeAll();
 
     var manager = ProducerIdManager.init(null, 60_000, &pool);
     try std.testing.expectEqual(@as(i64, -1), manager.getProducerId());
@@ -145,7 +145,7 @@ test "ProducerIdManager init" {
 
 test "ProducerIdManager transactional init" {
     var pool = BrokerPool.init(std.testing.allocator);
-    defer pool.deinit();
+    defer pool.closeAll();
 
     var manager = ProducerIdManager.init("my-txn-id", 120_000, &pool);
     try std.testing.expectEqualStrings("my-txn-id", manager.transactional_id.?);
@@ -155,7 +155,7 @@ test "ProducerIdManager transactional init" {
 
 test "ProducerIdManager epoch bump" {
     var pool = BrokerPool.init(std.testing.allocator);
-    defer pool.deinit();
+    defer pool.closeAll();
 
     var manager = ProducerIdManager.init(null, 60_000, &pool);
 

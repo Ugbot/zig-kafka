@@ -85,7 +85,7 @@ pub const KafkaClient = client.KafkaClient;
 pub const Producer = client.KafkaProducer;
 pub const Consumer = client.KafkaConsumer;
 pub const Admin = client.KafkaAdmin;
-pub const RecordBatch = protocol.record_batch.RecordBatch;
+pub const RecordBatchBuilder = protocol.record_batch.RecordBatchBuilder;
 
 test {
     // Import all modules to ensure they compile

@@ -25,11 +25,11 @@ pub const rd_kafka_topic_conf_t = opaque {};
 // Configuration API (simplified - stores config, actual Kafka connection deferred)
 //
 
-export fn rd_kafka_conf_new() callconv(.C) ?*rd_kafka_conf_t {
+export fn rd_kafka_conf_new() callconv(.c) ?*rd_kafka_conf_t {
     return @ptrFromInt(1); // Stub - return non-null
 }
 
-export fn rd_kafka_conf_destroy(conf: ?*rd_kafka_conf_t) callconv(.C) void {
+export fn rd_kafka_conf_destroy(conf: ?*rd_kafka_conf_t) callconv(.c) void {
     _ = conf;
 }
 
@@ -39,7 +39,7 @@ export fn rd_kafka_conf_set(
     value: [*:0]const u8,
     errstr: [*]u8,
     errstr_size: usize,
-) callconv(.C) types.rd_kafka_conf_res_t {
+) callconv(.c) types.rd_kafka_conf_res_t {
     _ = conf;
     _ = name;
     _ = value;
@@ -48,7 +48,7 @@ export fn rd_kafka_conf_set(
     return .RD_KAFKA_CONF_OK;
 }
 
-export fn rd_kafka_conf_dup(conf: ?*const rd_kafka_conf_t) callconv(.C) ?*rd_kafka_conf_t {
+export fn rd_kafka_conf_dup(conf: ?*const rd_kafka_conf_t) callconv(.c) ?*rd_kafka_conf_t {
     _ = conf;
     return @ptrFromInt(1); // Stub
 }
@@ -62,7 +62,7 @@ export fn rd_kafka_new(
     conf: ?*rd_kafka_conf_t,
     errstr: [*]u8,
     errstr_size: usize,
-) callconv(.C) ?*rd_kafka_t {
+) callconv(.c) ?*rd_kafka_t {
     _ = conf;
     _ = errstr;
     _ = errstr_size;
@@ -71,16 +71,16 @@ export fn rd_kafka_new(
     return @ptrFromInt(handle);
 }
 
-export fn rd_kafka_destroy(rk: ?*rd_kafka_t) callconv(.C) void {
+export fn rd_kafka_destroy(rk: ?*rd_kafka_t) callconv(.c) void {
     _ = rk;
 }
 
-export fn rd_kafka_name(rk: ?*const rd_kafka_t) callconv(.C) [*:0]const u8 {
+export fn rd_kafka_name(rk: ?*const rd_kafka_t) callconv(.c) [*:0]const u8 {
     _ = rk;
     return "zig-kafka";
 }
 
-export fn rd_kafka_type(rk: ?*const rd_kafka_t) callconv(.C) types.rd_kafka_type_t {
+export fn rd_kafka_type(rk: ?*const rd_kafka_t) callconv(.c) types.rd_kafka_type_t {
     const handle = @intFromPtr(rk orelse return .RD_KAFKA_PRODUCER);
     return if (handle >= 200) .RD_KAFKA_CONSUMER else .RD_KAFKA_PRODUCER;
 }
@@ -93,18 +93,18 @@ export fn rd_kafka_topic_new(
     rk: ?*rd_kafka_t,
     topic: [*:0]const u8,
     conf: ?*rd_kafka_topic_conf_t,
-) callconv(.C) ?*rd_kafka_topic_t {
+) callconv(.c) ?*rd_kafka_topic_t {
     _ = rk;
     _ = topic;
     _ = conf;
     return @ptrFromInt(300); // Stub
 }
 
-export fn rd_kafka_topic_destroy(rkt: ?*rd_kafka_topic_t) callconv(.C) void {
+export fn rd_kafka_topic_destroy(rkt: ?*rd_kafka_topic_t) callconv(.c) void {
     _ = rkt;
 }
 
-export fn rd_kafka_topic_name(rkt: ?*const rd_kafka_topic_t) callconv(.C) [*:0]const u8 {
+export fn rd_kafka_topic_name(rkt: ?*const rd_kafka_topic_t) callconv(.c) [*:0]const u8 {
     _ = rkt;
     return "unknown-topic";
 }
@@ -122,7 +122,7 @@ export fn rd_kafka_produce(
     key: ?*const anyopaque,
     keylen: usize,
     msg_opaque: ?*anyopaque,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = rkt;
     _ = partition;
     _ = msgflags;
@@ -135,14 +135,14 @@ export fn rd_kafka_produce(
     return 0;
 }
 
-export fn rd_kafka_flush(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.C) c_int {
+export fn rd_kafka_flush(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.c) c_int {
     _ = rk;
     _ = timeout_ms;
     // TODO: Implement flush
     return 0;
 }
 
-export fn rd_kafka_poll(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.C) c_int {
+export fn rd_kafka_poll(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.c) c_int {
     _ = rk;
     _ = timeout_ms;
     return 0;
@@ -155,7 +155,7 @@ export fn rd_kafka_poll(rk: ?*rd_kafka_t, timeout_ms: c_int) callconv(.C) c_int 
 export fn rd_kafka_subscribe(
     rk: ?*rd_kafka_t,
     topics: ?*const types.rd_kafka_topic_partition_list_t,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = rk;
     _ = topics;
     // TODO: Implement subscription
@@ -165,18 +165,18 @@ export fn rd_kafka_subscribe(
 export fn rd_kafka_consumer_poll(
     rk: ?*rd_kafka_t,
     timeout_ms: c_int,
-) callconv(.C) ?*types.rd_kafka_message_t {
+) callconv(.c) ?*types.rd_kafka_message_t {
     _ = rk;
     _ = timeout_ms;
     // TODO: Implement consumer poll
     return null;
 }
 
-export fn rd_kafka_message_destroy(rkmessage: ?*types.rd_kafka_message_t) callconv(.C) void {
+export fn rd_kafka_message_destroy(rkmessage: ?*types.rd_kafka_message_t) callconv(.c) void {
     _ = rkmessage;
 }
 
-export fn rd_kafka_consumer_close(rk: ?*rd_kafka_t) callconv(.C) c_int {
+export fn rd_kafka_consumer_close(rk: ?*rd_kafka_t) callconv(.c) c_int {
     _ = rk;
     return 0;
 }
@@ -184,7 +184,7 @@ export fn rd_kafka_consumer_close(rk: ?*rd_kafka_t) callconv(.C) c_int {
 export fn rd_kafka_assignment(
     rk: ?*rd_kafka_t,
     partitions: ?*?*types.rd_kafka_topic_partition_list_t,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = rk;
     _ = partitions;
     return -1;
@@ -194,7 +194,7 @@ export fn rd_kafka_committed(
     rk: ?*rd_kafka_t,
     partitions: ?*types.rd_kafka_topic_partition_list_t,
     timeout_ms: c_int,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = rk;
     _ = partitions;
     _ = timeout_ms;
@@ -205,7 +205,7 @@ export fn rd_kafka_commit(
     rk: ?*rd_kafka_t,
     offsets: ?*types.rd_kafka_topic_partition_list_t,
     async_: c_int,
-) callconv(.C) c_int {
+) callconv(.c) c_int {
     _ = rk;
     _ = offsets;
     _ = async_;
@@ -219,7 +219,7 @@ export fn rd_kafka_commit(
 var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 const allocator = gpa.allocator();
 
-export fn rd_kafka_topic_partition_list_new(size: c_int) callconv(.C) ?*types.rd_kafka_topic_partition_list_t {
+export fn rd_kafka_topic_partition_list_new(size: c_int) callconv(.c) ?*types.rd_kafka_topic_partition_list_t {
     const list = allocator.create(types.rd_kafka_topic_partition_list_t) catch return null;
     const elems = allocator.alloc(types.rd_kafka_topic_partition_t, @intCast(size)) catch {
         allocator.destroy(list);
@@ -235,7 +235,7 @@ export fn rd_kafka_topic_partition_list_new(size: c_int) callconv(.C) ?*types.rd
     return list;
 }
 
-export fn rd_kafka_topic_partition_list_destroy(rkparlist: ?*types.rd_kafka_topic_partition_list_t) callconv(.C) void {
+export fn rd_kafka_topic_partition_list_destroy(rkparlist: ?*types.rd_kafka_topic_partition_list_t) callconv(.c) void {
     if (rkparlist) |list| {
         const elems = list.elems[0..@intCast(list.size)];
         allocator.free(elems);
@@ -247,7 +247,7 @@ export fn rd_kafka_topic_partition_list_add(
     rktparlist: ?*types.rd_kafka_topic_partition_list_t,
     topic: [*:0]const u8,
     partition: i32,
-) callconv(.C) ?*types.rd_kafka_topic_partition_t {
+) callconv(.c) ?*types.rd_kafka_topic_partition_t {
     const list = rktparlist orelse return null;
     if (list.cnt >= list.size) return null;
 
@@ -274,10 +274,10 @@ export fn rd_kafka_topic_partition_list_add(
 // Version info
 //
 
-export fn rd_kafka_version() callconv(.C) c_int {
+export fn rd_kafka_version() callconv(.c) c_int {
     return 0x020d00ff; // 2.13.0
 }
 
-export fn rd_kafka_version_str() callconv(.C) [*:0]const u8 {
+export fn rd_kafka_version_str() callconv(.c) [*:0]const u8 {
     return "2.13.0-zig-kafka";
 }

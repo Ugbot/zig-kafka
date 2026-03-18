@@ -22,35 +22,47 @@ pub fn build(b: *std.Build) void {
     // Unit tests
     const unit_tests = b.addTest(.{
         .name = "sdk-unit-tests",
-        .root_source_file = b.path("src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/lib.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "kafka_generated", .module = kafka_generated },
+            },
+        }),
     });
-    unit_tests.root_module.addImport("kafka_generated", kafka_generated);
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     // Protocol tests
     const protocol_tests = b.addTest(.{
         .name = "protocol-tests",
-        .root_source_file = b.path("tests/protocol_tests.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/protocol_tests.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "kafka", .module = kafka },
+                .{ .name = "kafka_generated", .module = kafka_generated },
+            },
+        }),
     });
-    protocol_tests.root_module.addImport("kafka", kafka);
-    protocol_tests.root_module.addImport("kafka_generated", kafka_generated);
 
     const run_protocol_tests = b.addRunArtifact(protocol_tests);
 
     // Integration tests
     const integration_tests = b.addTest(.{
         .name = "integration-tests",
-        .root_source_file = b.path("tests/integration_tests.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("tests/integration_tests.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "kafka", .module = kafka },
+                .{ .name = "kafka_generated", .module = kafka_generated },
+            },
+        }),
     });
-    integration_tests.root_module.addImport("kafka", kafka);
-    integration_tests.root_module.addImport("kafka_generated", kafka_generated);
 
     const run_integration_tests = b.addRunArtifact(integration_tests);
 

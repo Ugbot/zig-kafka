@@ -36,7 +36,7 @@ test "type encoding/decoding" {
 
     // Test VarInt
     {
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         defer buffer.deinit();
 
         try types.encodeVarInt(buffer.writer(), 300);
@@ -48,7 +48,7 @@ test "type encoding/decoding" {
 
     // Test CompactString
     {
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         defer buffer.deinit();
 
         try types.encodeCompactString(buffer.writer(), "hello");

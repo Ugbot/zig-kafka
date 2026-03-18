@@ -191,6 +191,24 @@ pub fn encodeArrayNonNull(comptime T: type, writer: anytype, value: ?[]const T, 
     }
 }
 
+/// Helper to call a decode function that may accept either 2 args (reader, allocator)
+/// or 3 args (reader, version, allocator). Generated protocol structs use the 3-arg
+/// form; primitive type decoders (e.g. decodeNonNullableCompactString) use 2 args.
+/// For 3-arg functions called without a known version, we pass version=0 which is
+/// safe because the caller (decodeArray/decodeCompactArray) has already selected the
+/// correct array encoding format.
+fn callDecodeFn(comptime T: type, decodeFn: anytype, reader: anytype, allocator: std.mem.Allocator) !T {
+    const FnType = @TypeOf(decodeFn);
+    const fn_info = @typeInfo(FnType).@"fn";
+    if (fn_info.params.len == 3) {
+        // 3-arg: decode(reader, version, allocator)
+        return decodeFn(reader, @as(i16, 0), allocator);
+    } else {
+        // 2-arg: decode(reader, allocator)
+        return decodeFn(reader, allocator);
+    }
+}
+
 pub fn decodeArray(comptime T: type, reader: anytype, allocator: std.mem.Allocator, decodeFn: anytype) !?[]T {
     const len = try decodeInt32(reader);
     if (len < 0) {
@@ -201,7 +219,7 @@ pub fn decodeArray(comptime T: type, reader: anytype, allocator: std.mem.Allocat
     }
     const array = try allocator.alloc(T, @intCast(len));
     for (array) |*item| {
-        item.* = try decodeFn(reader, allocator);
+        item.* = try callDecodeFn(T, decodeFn, reader, allocator);
     }
     return array;
 }
@@ -465,7 +483,7 @@ pub fn decodeCompactArray(comptime T: type, reader: anytype, allocator: std.mem.
     }
     const array = try allocator.alloc(T, actual_len);
     for (array) |*item| {
-        item.* = try decodeFn(reader, allocator);
+        item.* = try callDecodeFn(T, decodeFn, reader, allocator);
     }
     return array;
 }
@@ -752,7 +770,7 @@ test "VarInt encoding/decoding" {
     
     for (test_cases) |tc| {
         // Encode
-        var buffer = std.ArrayList(u8).init(testing.allocator);
+        var buffer = std.array_list.Managed(u8).init(testing.allocator);
         defer buffer.deinit();
         try encodeVarInt(buffer.writer(), tc.value);
         try testing.expectEqualSlices(u8, tc.encoded, buffer.items);
@@ -770,7 +788,7 @@ test "CompactString encoding/decoding" {
     
     // Test null string
     {
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         defer buffer.deinit();
         try encodeCompactString(buffer.writer(), null);
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buffer.items);
@@ -782,7 +800,7 @@ test "CompactString encoding/decoding" {
     
     // Test empty string
     {
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         defer buffer.deinit();
         try encodeCompactString(buffer.writer(), "");
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buffer.items);
@@ -795,7 +813,7 @@ test "CompactString encoding/decoding" {
     
     // Test regular string
     {
-        var buffer = std.ArrayList(u8).init(allocator);
+        var buffer = std.array_list.Managed(u8).init(allocator);
         defer buffer.deinit();
         try encodeCompactString(buffer.writer(), "hello");
         try testing.expectEqualSlices(u8, &[_]u8{0x06} ++ "hello", buffer.items);
@@ -847,7 +865,7 @@ test "Boolean encoding/decoding" {
     const testing = std.testing;
 
     for ([_]bool{ true, false }) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeBoolean(buf.writer(), val);
         try testing.expectEqual(@as(usize, 1), buf.items.len);
@@ -870,7 +888,7 @@ test "Int8 encoding/decoding" {
     const testing = std.testing;
     const values = [_]i8{ 0, 1, -1, 127, -128 };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt8(buf.writer(), val);
         try testing.expectEqual(@as(usize, 1), buf.items.len);
@@ -885,7 +903,7 @@ test "Int16 encoding/decoding big-endian" {
     const testing = std.testing;
     const values = [_]i16{ 0, 1, -1, 256, -256, 32767, -32768 };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt16(buf.writer(), val);
         try testing.expectEqual(@as(usize, 2), buf.items.len);
@@ -896,7 +914,7 @@ test "Int16 encoding/decoding big-endian" {
     }
     // Verify big-endian byte order: 0x0100 = 256
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt16(buf.writer(), 256);
         try testing.expectEqualSlices(u8, &[_]u8{ 0x01, 0x00 }, buf.items);
@@ -907,7 +925,7 @@ test "Int32 encoding/decoding big-endian" {
     const testing = std.testing;
     const values = [_]i32{ 0, 1, -1, 65536, -65536, std.math.maxInt(i32), std.math.minInt(i32) };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt32(buf.writer(), val);
         try testing.expectEqual(@as(usize, 4), buf.items.len);
@@ -918,7 +936,7 @@ test "Int32 encoding/decoding big-endian" {
     }
     // Verify big-endian: 0x00010000 = 65536
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt32(buf.writer(), 65536);
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x01, 0x00, 0x00 }, buf.items);
@@ -929,7 +947,7 @@ test "Int64 encoding/decoding big-endian" {
     const testing = std.testing;
     const values = [_]i64{ 0, 1, -1, 0x100000000, -0x100000000, std.math.maxInt(i64), std.math.minInt(i64) };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeInt64(buf.writer(), val);
         try testing.expectEqual(@as(usize, 8), buf.items.len);
@@ -944,7 +962,7 @@ test "Uint16 encoding/decoding" {
     const testing = std.testing;
     const values = [_]u16{ 0, 1, 255, 256, 65535 };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeUint16(buf.writer(), val);
         try testing.expectEqual(@as(usize, 2), buf.items.len);
@@ -959,7 +977,7 @@ test "Uint32 encoding/decoding" {
     const testing = std.testing;
     const values = [_]u32{ 0, 1, 65535, 65536, std.math.maxInt(u32) };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeUint32(buf.writer(), val);
         try testing.expectEqual(@as(usize, 4), buf.items.len);
@@ -974,7 +992,7 @@ test "Float64 encoding/decoding" {
     const testing = std.testing;
     const values = [_]f64{ 0.0, 1.0, -1.0, 3.14159265358979, std.math.floatMax(f64), std.math.floatMin(f64) };
     for (values) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeFloat64(buf.writer(), val);
         try testing.expectEqual(@as(usize, 8), buf.items.len);
@@ -990,7 +1008,7 @@ test "UUID encoding/decoding" {
     // Zero UUID
     {
         const zero_uuid = [_]u8{0} ** 16;
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeUuid(buf.writer(), zero_uuid);
         try testing.expectEqual(@as(usize, 16), buf.items.len);
@@ -1002,7 +1020,7 @@ test "UUID encoding/decoding" {
     // Non-zero UUID
     {
         const uuid = [16]u8{ 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10 };
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeUuid(buf.writer(), uuid);
 
@@ -1032,7 +1050,7 @@ test "VarInt extended zigzag table" {
 
     // Round-trip for max/min i32 through full encode/decode
     for ([_]i32{ std.math.maxInt(i32), std.math.minInt(i32), 0, 1, -1 }) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeVarInt(buf.writer(), val);
 
@@ -1058,7 +1076,7 @@ test "UnsignedVarInt encoding/decoding" {
     };
 
     for (cases) |tc| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeUnsignedVarInt(buf.writer(), tc.value);
         try testing.expectEqualSlices(u8, tc.encoded, buf.items);
@@ -1074,7 +1092,7 @@ test "VarLong encoding/decoding" {
 
     const cases = [_]i64{ 0, 1, -1, 2, -2, 127, -128, 32767, -32768, std.math.maxInt(i64), std.math.minInt(i64) };
     for (cases) |val| {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeVarLong(buf.writer(), val);
 
@@ -1098,7 +1116,7 @@ test "String encoding/decoding - null vs empty distinction" {
 
     // Null string: length = -1 (0xFFFF as i16 big-endian)
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeString(buf.writer(), null);
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF }, buf.items);
@@ -1110,7 +1128,7 @@ test "String encoding/decoding - null vs empty distinction" {
     }
     // Empty string: length = 0
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeString(buf.writer(), "");
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00 }, buf.items);
@@ -1123,7 +1141,7 @@ test "String encoding/decoding - null vs empty distinction" {
     }
     // Regular string
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeString(buf.writer(), "test");
         try testing.expectEqual(@as(usize, 6), buf.items.len); // 2 + 4
@@ -1142,7 +1160,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
 
     // Null bytes: length = -1 (0xFFFFFFFF as i32 big-endian)
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeBytes(buf.writer(), null);
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }, buf.items);
@@ -1154,7 +1172,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
     }
     // Empty bytes: length = 0
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeBytes(buf.writer(), &[_]u8{});
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00, 0x00, 0x00 }, buf.items);
@@ -1168,7 +1186,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
     // Regular bytes
     {
         const data = &[_]u8{ 0xDE, 0xAD, 0xBE, 0xEF };
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeBytes(buf.writer(), data);
         try testing.expectEqual(@as(usize, 8), buf.items.len); // 4 + 4
@@ -1187,7 +1205,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
 
     // Null: varint 0
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeCompactBytes(buf.writer(), null);
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
@@ -1199,7 +1217,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
     }
     // Empty: varint 1
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeCompactBytes(buf.writer(), &[_]u8{});
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buf.items);
@@ -1213,7 +1231,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
     // Regular
     {
         const data = &[_]u8{ 0xCA, 0xFE };
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeCompactBytes(buf.writer(), data);
         try testing.expectEqual(computeSizeCompactBytes(data), buf.items.len);
@@ -1233,7 +1251,7 @@ test "CompactString with multi-byte varint length" {
     var long_str: [200]u8 = undefined;
     for (&long_str) |*b| b.* = 'A';
 
-    var buf = std.ArrayList(u8).init(allocator);
+    var buf = std.array_list.Managed(u8).init(allocator);
     defer buf.deinit();
     try encodeCompactString(buf.writer(), &long_str);
     try testing.expectEqual(computeSizeCompactString(&long_str), buf.items.len);
@@ -1254,14 +1272,14 @@ test "Array encoding/decoding - null, empty, populated" {
 
     // Null array: length = -1
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeArrayLen(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }, buf.items);
     }
     // Empty array: length = 0
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         const empty: []const i32 = &[_]i32{};
         try encodeArrayLen(buf.writer(), @as(?[]const i32, empty));
@@ -1269,7 +1287,7 @@ test "Array encoding/decoding - null, empty, populated" {
     }
     // Primitive array round-trip
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         const writer = buf.writer();
 
@@ -1296,14 +1314,14 @@ test "CompactArray encoding/decoding - null, empty, populated" {
 
     // Null compact array: varint 0
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeCompactArrayLen(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
     }
     // Empty compact array: varint 1
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         const empty: []const i32 = &[_]i32{};
         try encodeCompactArrayLen(buf.writer(), @as(?[]const i32, empty));
@@ -1311,7 +1329,7 @@ test "CompactArray encoding/decoding - null, empty, populated" {
     }
     // Compact primitive array round-trip
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         const writer = buf.writer();
 
@@ -1338,7 +1356,7 @@ test "TaggedFields encoding/decoding" {
 
     // Empty tagged fields
     {
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeTaggedFields(buf.writer(), &[_]TaggedField{});
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
@@ -1352,7 +1370,7 @@ test "TaggedFields encoding/decoding" {
     {
         const data = &[_]u8{ 0xAA, 0xBB };
         const fields = [_]TaggedField{.{ .tag = 5, .data = data }};
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeTaggedFields(buf.writer(), &fields);
         try testing.expectEqual(computeSizeTaggedFields(&fields), buf.items.len);
@@ -1375,7 +1393,7 @@ test "TaggedFields encoding/decoding" {
             .{ .tag = 0, .data = data1 },
             .{ .tag = 10, .data = data2 },
         };
-        var buf = std.ArrayList(u8).init(allocator);
+        var buf = std.array_list.Managed(u8).init(allocator);
         defer buf.deinit();
         try encodeTaggedFields(buf.writer(), &fields);
         try testing.expectEqual(computeSizeTaggedFields(&fields), buf.items.len);
@@ -1401,7 +1419,7 @@ test "computeSize consistency with encode for all types" {
     // String computeSize
     {
         for ([_]?[]const u8{ null, "", "abc", "hello world" }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeString(buf.writer(), val);
             try testing.expectEqual(computeSizeString(val), buf.items.len);
@@ -1410,7 +1428,7 @@ test "computeSize consistency with encode for all types" {
     // CompactString computeSize
     {
         for ([_]?[]const u8{ null, "", "abc", "hello world" }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeCompactString(buf.writer(), val);
             try testing.expectEqual(computeSizeCompactString(val), buf.items.len);
@@ -1421,7 +1439,7 @@ test "computeSize consistency with encode for all types" {
         const empty_bytes: []const u8 = &[_]u8{};
         const some_bytes: []const u8 = &[_]u8{ 1, 2, 3 };
         for ([_]?[]const u8{ null, empty_bytes, some_bytes }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeBytes(buf.writer(), val);
             try testing.expectEqual(computeSizeBytes(val), buf.items.len);
@@ -1432,7 +1450,7 @@ test "computeSize consistency with encode for all types" {
         const empty_bytes: []const u8 = &[_]u8{};
         const some_bytes: []const u8 = &[_]u8{ 1, 2, 3 };
         for ([_]?[]const u8{ null, empty_bytes, some_bytes }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeCompactBytes(buf.writer(), val);
             try testing.expectEqual(computeSizeCompactBytes(val), buf.items.len);
@@ -1441,7 +1459,7 @@ test "computeSize consistency with encode for all types" {
     // VarInt computeSize for range of values
     {
         for ([_]i32{ 0, 1, -1, 63, -64, 64, -65, 8191, -8192, std.math.maxInt(i32), std.math.minInt(i32) }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeVarInt(buf.writer(), val);
             try testing.expectEqual(computeSizeVarInt(val), buf.items.len);
@@ -1450,7 +1468,7 @@ test "computeSize consistency with encode for all types" {
     // VarLong computeSize
     {
         for ([_]i64{ 0, 1, -1, 127, -128, std.math.maxInt(i64), std.math.minInt(i64) }) |val| {
-            var buf = std.ArrayList(u8).init(allocator);
+            var buf = std.array_list.Managed(u8).init(allocator);
             defer buf.deinit();
             try encodeVarLong(buf.writer(), val);
             try testing.expectEqual(computeSizeVarLong(val), buf.items.len);
@@ -1473,7 +1491,7 @@ test "NonNull compact array encoding — null encodes as empty (varint 1)" {
 
     // Nullable: null → varint 0 (null sentinel)
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeCompactArrayLen(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
@@ -1481,7 +1499,7 @@ test "NonNull compact array encoding — null encodes as empty (varint 1)" {
 
     // NonNull: null → varint 1 (empty array)
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeCompactArrayLenNonNull(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buf.items);
@@ -1490,11 +1508,11 @@ test "NonNull compact array encoding — null encodes as empty (varint 1)" {
     // Both encode populated arrays identically
     {
         const arr: []const i32 = &[_]i32{ 1, 2, 3 };
-        var buf_nullable = std.ArrayList(u8).init(testing.allocator);
+        var buf_nullable = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nullable.deinit();
         try encodeCompactArrayLen(buf_nullable.writer(), @as(?[]const i32, arr));
 
-        var buf_nonnull = std.ArrayList(u8).init(testing.allocator);
+        var buf_nonnull = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nonnull.deinit();
         try encodeCompactArrayLenNonNull(buf_nonnull.writer(), @as(?[]const i32, arr));
 
@@ -1506,11 +1524,11 @@ test "NonNull compact array encoding — null encodes as empty (varint 1)" {
     // Empty arrays also encode identically (varint 1)
     {
         const empty: []const i32 = &[_]i32{};
-        var buf_nullable = std.ArrayList(u8).init(testing.allocator);
+        var buf_nullable = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nullable.deinit();
         try encodeCompactArrayLen(buf_nullable.writer(), @as(?[]const i32, empty));
 
-        var buf_nonnull = std.ArrayList(u8).init(testing.allocator);
+        var buf_nonnull = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nonnull.deinit();
         try encodeCompactArrayLenNonNull(buf_nonnull.writer(), @as(?[]const i32, empty));
 
@@ -1524,7 +1542,7 @@ test "NonNull classic array encoding — null encodes as empty (i32 0)" {
 
     // Nullable: null → i32(-1) = 0xFFFFFFFF
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeArrayLen(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }, buf.items);
@@ -1532,7 +1550,7 @@ test "NonNull classic array encoding — null encodes as empty (i32 0)" {
 
     // NonNull: null → i32(0) = 0x00000000
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeArrayLenNonNull(buf.writer(), @as(?[]const i32, null));
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00, 0x00, 0x00 }, buf.items);
@@ -1541,11 +1559,11 @@ test "NonNull classic array encoding — null encodes as empty (i32 0)" {
     // Both encode populated arrays identically
     {
         const arr: []const i32 = &[_]i32{ 10, 20 };
-        var buf_nullable = std.ArrayList(u8).init(testing.allocator);
+        var buf_nullable = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nullable.deinit();
         try encodeArrayLen(buf_nullable.writer(), @as(?[]const i32, arr));
 
-        var buf_nonnull = std.ArrayList(u8).init(testing.allocator);
+        var buf_nonnull = std.array_list.Managed(u8).init(testing.allocator);
         defer buf_nonnull.deinit();
         try encodeArrayLenNonNull(buf_nonnull.writer(), @as(?[]const i32, arr));
 
@@ -1580,7 +1598,7 @@ test "encodeCompactArrayNonNull — full array with elements" {
 
     // Null → varint(1) (empty), no elements
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeCompactArrayNonNull(i32, buf.writer(), @as(?[]const i32, null), encodeInt32);
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buf.items); // varint(1) = empty
@@ -1589,7 +1607,7 @@ test "encodeCompactArrayNonNull — full array with elements" {
     // Populated → varint(len+1) + elements
     {
         const arr: []const i32 = &[_]i32{42};
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeCompactArrayNonNull(i32, buf.writer(), @as(?[]const i32, arr), encodeInt32);
         // varint(2) + i32(42)
@@ -1602,7 +1620,7 @@ test "encodeArrayNonNull — full array with elements" {
 
     // Null → i32(0) (empty), no elements
     {
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeArrayNonNull(i32, buf.writer(), @as(?[]const i32, null), encodeInt32);
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00, 0x00, 0x00 }, buf.items); // i32(0)
@@ -1611,7 +1629,7 @@ test "encodeArrayNonNull — full array with elements" {
     // Populated → i32(len) + elements
     {
         const arr: []const i32 = &[_]i32{42};
-        var buf = std.ArrayList(u8).init(testing.allocator);
+        var buf = std.array_list.Managed(u8).init(testing.allocator);
         defer buf.deinit();
         try encodeArrayNonNull(i32, buf.writer(), @as(?[]const i32, arr), encodeInt32);
         // i32(1) + i32(42)

@@ -1200,7 +1200,7 @@ pub const FetchResponse = struct {
 
         if (is_flexible) {
             const num_tagged_fields = try types.decodeUnsignedVarInt(reader);
-            var unknown_tagged_fields = std.ArrayList(types.TaggedField).init(allocator);
+            var unknown_tagged_fields = std.array_list.Managed(types.TaggedField).init(allocator);
 
             var i: u32 = 0;
             while (i < num_tagged_fields) : (i += 1) {

@@ -235,7 +235,7 @@ pub const KafkaProducer = struct {
             if (!self.started) {
                 self.sender.runOnce(std.heap.page_allocator);
             }
-            std.time.sleep(1_000_000); // 1ms
+            std.Thread.sleep(1_000_000); // 1ms
         }
     }
 

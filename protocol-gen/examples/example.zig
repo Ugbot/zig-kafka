@@ -33,7 +33,7 @@ pub fn main() !void {
 
     // Test encoding
     std.debug.print("\n📤 Encoding test:\n", .{});
-    var buffer = std.ArrayList(u8).init(allocator);
+    var buffer = std.array_list.Managed(u8).init(allocator);
     defer buffer.deinit();
 
     try ApiVersionsRequest.encode(&request, buffer.writer(), test_version);

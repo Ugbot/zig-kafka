@@ -545,7 +545,7 @@ pub const GroupCoordinator = struct {
         }
 
         // Get partition counts from metadata cache
-        var assignor_topics = std.ArrayList(Assignor.Topic).init(arena_allocator);
+        var assignor_topics = std.array_list.Managed(Assignor.Topic).init(arena_allocator);
         var topic_iter = unique_topics.keyIterator();
         while (topic_iter.next()) |topic_name| {
             const topic_info = self.metadata_cache.getTopic(topic_name.*);
@@ -588,7 +588,7 @@ pub const GroupCoordinator = struct {
     /// Encode ConsumerProtocolAssignment for SyncGroup response.
     /// Format: version (int16) + assigned_partitions (array) + user_data (bytes)
     pub fn encodeAssignmentMetadata(self: *Self, partitions: []const TopicPartition) ![]u8 {
-        var buf = std.ArrayList(u8).init(self.allocator);
+        var buf = std.array_list.Managed(u8).init(self.allocator);
         errdefer buf.deinit();
 
         const writer = buf.writer();
@@ -597,7 +597,7 @@ pub const GroupCoordinator = struct {
         try types.encodeInt16(writer, 0);
 
         // Group partitions by topic
-        var topics_map = std.StringHashMap(std.ArrayList(i32)).init(self.allocator);
+        var topics_map = std.StringHashMap(std.array_list.Managed(i32)).init(self.allocator);
         defer {
             var iter = topics_map.valueIterator();
             while (iter.next()) |list| {
@@ -609,7 +609,7 @@ pub const GroupCoordinator = struct {
         for (partitions) |tp| {
             var entry = try topics_map.getOrPut(tp.topic);
             if (!entry.found_existing) {
-                entry.value_ptr.* = std.ArrayList(i32).init(self.allocator);
+                entry.value_ptr.* = std.array_list.Managed(i32).init(self.allocator);
             }
             try entry.value_ptr.append(tp.partition);
         }
@@ -658,7 +658,7 @@ pub const GroupCoordinator = struct {
         self.subscription.revokeAll();
 
         // Collect all partitions first, then assign once
-        var partitions = std.ArrayList(TopicPartition).init(self.allocator);
+        var partitions = std.array_list.Managed(TopicPartition).init(self.allocator);
         defer partitions.deinit();
 
         // Parse each topic's partitions
@@ -696,7 +696,7 @@ pub const GroupCoordinator = struct {
     /// Format: version (int16) + topics (array of strings) + user_data (bytes)
     /// Uses non-compact encoding (for JoinGroup v0-v5)
     pub fn encodeSubscriptionMetadata(self: *Self) ![]u8 {
-        var buf = std.ArrayList(u8).init(self.allocator);
+        var buf = std.array_list.Managed(u8).init(self.allocator);
         errdefer buf.deinit();
 
         const writer = buf.writer();

@@ -345,7 +345,7 @@ const PartitionSet = std.ArrayHashMap(
 
 test "TransactionCoordinator init" {
     var pool = BrokerPool.init(std.testing.allocator);
-    defer pool.deinit();
+    defer pool.closeAll();
 
     var pid_mgr = ProducerIdManager.init("test-txn", 60_000, &pool);
 
@@ -359,7 +359,7 @@ test "TransactionCoordinator init" {
 
 test "TransactionCoordinator state transitions" {
     var pool = BrokerPool.init(std.testing.allocator);
-    defer pool.deinit();
+    defer pool.closeAll();
 
     var pid_mgr = ProducerIdManager.init("test-txn", 60_000, &pool);
 

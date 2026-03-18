@@ -17,9 +17,11 @@ pub fn build(b: *std.Build) void {
 
     const generator = b.addExecutable(.{
         .name = "kafka-protocol-generator",
-        .root_source_file = b.path("protocol-gen/src/main.zig"),
-        .target = target,
-        .optimize = .ReleaseFast, // Generator should be fast
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("protocol-gen/src/main.zig"),
+            .target = target,
+            .optimize = .ReleaseFast, // Generator should be fast
+        }),
     });
     b.installArtifact(generator);
 
@@ -52,25 +54,33 @@ pub fn build(b: *std.Build) void {
     // SDK static library (optional, for linking)
     const sdk_lib = b.addStaticLibrary(.{
         .name = "kafka",
-        .root_source_file = b.path("sdk/src/lib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("sdk/src/lib.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "kafka_generated", .module = kafka_generated },
+            },
+        }),
     });
-    sdk_lib.root_module.addImport("kafka_generated", kafka_generated);
     b.installArtifact(sdk_lib);
 
     //
     // C Compatibility Library
     //
 
-    const c_lib = b.addSharedLibrary(.{
-        .name = "rdkafka",
+    const c_module = b.createModule(.{
         .root_source_file = b.path("c-compat/src/root.zig"),
         .target = target,
         .optimize = optimize,
+    });
+    c_module.addImport("kafka", kafka);
+
+    const c_lib = b.addSharedLibrary(.{
+        .name = "rdkafka",
+        .root_module = c_module,
         .version = .{ .major = 2, .minor = 13, .patch = 0 },
     });
-    c_lib.root_module.addImport("kafka", kafka);
     c_lib.linkLibC();
     b.installArtifact(c_lib);
 
@@ -86,45 +96,59 @@ pub fn build(b: *std.Build) void {
     //
 
     // SDK unit tests
-    const sdk_tests = b.addTest(.{
-        .name = "sdk-tests",
+    const sdk_test_module = b.createModule(.{
         .root_source_file = b.path("sdk/src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
-    sdk_tests.root_module.addImport("kafka_generated", kafka_generated);
+    sdk_test_module.addImport("kafka_generated", kafka_generated);
+
+    const sdk_tests = b.addTest(.{
+        .name = "sdk-tests",
+        .root_module = sdk_test_module,
+    });
 
     const run_sdk_tests = b.addRunArtifact(sdk_tests);
 
     // SDK protocol tests
-    const protocol_tests = b.addTest(.{
-        .name = "protocol-tests",
+    const protocol_test_module = b.createModule(.{
         .root_source_file = b.path("sdk/tests/protocol_tests.zig"),
         .target = target,
         .optimize = optimize,
     });
-    protocol_tests.root_module.addImport("kafka", kafka);
-    protocol_tests.root_module.addImport("kafka_generated", kafka_generated);
+    protocol_test_module.addImport("kafka", kafka);
+    protocol_test_module.addImport("kafka_generated", kafka_generated);
+
+    const protocol_tests = b.addTest(.{
+        .name = "protocol-tests",
+        .root_module = protocol_test_module,
+    });
 
     const run_protocol_tests = b.addRunArtifact(protocol_tests);
 
     // SDK integration tests (requires running Kafka broker)
-    const integration_tests = b.addTest(.{
-        .name = "integration-tests",
+    const integration_test_module = b.createModule(.{
         .root_source_file = b.path("sdk/tests/integration_tests.zig"),
         .target = target,
         .optimize = optimize,
     });
-    integration_tests.root_module.addImport("kafka", kafka);
-    integration_tests.root_module.addImport("kafka_generated", kafka_generated);
+    integration_test_module.addImport("kafka", kafka);
+    integration_test_module.addImport("kafka_generated", kafka_generated);
+
+    const integration_tests = b.addTest(.{
+        .name = "integration-tests",
+        .root_module = integration_test_module,
+    });
 
     const run_integration_tests = b.addRunArtifact(integration_tests);
 
     // C API test executable
     const c_test = b.addExecutable(.{
         .name = "c-api-test",
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     c_test.addCSourceFile(.{
         .file = b.path("c-compat/tests/c_api_test.c"),

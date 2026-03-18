@@ -51,7 +51,7 @@ pub fn roundRobinAssign(
     }
 
     // Flatten all partitions across all topics
-    var all_partitions = std.ArrayList(TopicPartition).init(allocator);
+    var all_partitions = std.array_list.Managed(TopicPartition).init(allocator);
     defer all_partitions.deinit();
 
     for (topics) |topic| {

@@ -53,7 +53,7 @@ pub fn rangeAssign(
     // For each topic, assign partitions in ranges
     for (topics) |topic| {
         // Find members subscribing to this topic
-        var subscribing_indices = std.ArrayList(usize).init(allocator);
+        var subscribing_indices = std.array_list.Managed(usize).init(allocator);
         defer subscribing_indices.deinit();
 
         for (sorted_members, 0..) |member, idx| {

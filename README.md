@@ -125,7 +125,7 @@ zig build gen -- protocol-gen/specs/ProduceRequest.json output.zig
 
 ## 📋 Requirements
 
-- Zig 0.14.1+
+- Zig 0.15.2+
 - Kafka 2.0+ or Redpanda 22.3+ (for testing)
 
 ## 🤝 Contributing

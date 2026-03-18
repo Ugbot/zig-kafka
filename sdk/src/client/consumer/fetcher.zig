@@ -135,7 +135,7 @@ pub const Fetcher = struct {
         self.record_count = 0;
 
         // Group assigned partitions by leader broker
-        var broker_partitions = std.AutoHashMap(i32, std.ArrayList(PartitionToFetch)).init(self.allocator);
+        var broker_partitions = std.AutoHashMap(i32, std.array_list.Managed(PartitionToFetch)).init(self.allocator);
         defer {
             var it = broker_partitions.iterator();
             while (it.next()) |entry| {
@@ -164,7 +164,7 @@ pub const Fetcher = struct {
             // Add to broker's partition list
             const gop = try broker_partitions.getOrPut(leader_id);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(PartitionToFetch).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(PartitionToFetch).init(self.allocator);
             }
 
             try gop.value_ptr.append(.{
@@ -230,7 +230,7 @@ pub const Fetcher = struct {
         req.min_bytes = self.fetch_min_bytes;
 
         // Group partitions by topic
-        var topic_map = std.StringHashMap(std.ArrayList(FetchPartition)).init(self.allocator);
+        var topic_map = std.StringHashMap(std.array_list.Managed(FetchPartition)).init(self.allocator);
         defer {
             var it = topic_map.iterator();
             while (it.next()) |entry| {
@@ -244,7 +244,7 @@ pub const Fetcher = struct {
 
             const gop = try topic_map.getOrPut(part.topic);
             if (!gop.found_existing) {
-                gop.value_ptr.* = std.ArrayList(FetchPartition).init(self.allocator);
+                gop.value_ptr.* = std.array_list.Managed(FetchPartition).init(self.allocator);
             }
 
             try gop.value_ptr.append(.{
@@ -255,7 +255,7 @@ pub const Fetcher = struct {
         }
 
         // Build topics array
-        var topics_list = std.ArrayList(FetchTopic).init(self.allocator);
+        var topics_list = std.array_list.Managed(FetchTopic).init(self.allocator);
         defer topics_list.deinit();
 
         var it = topic_map.iterator();
@@ -709,6 +709,7 @@ test "Fetcher init" {
     var subscription = @import("subscription.zig").SubscriptionState.init(allocator);
     defer subscription.deinit();
 
+    var metrics = ConsumerMetrics{};
     var fetcher = try Fetcher.init(
         &broker_pool,
         &metadata,
@@ -717,6 +718,8 @@ test "Fetcher init" {
         500,
         1024 * 1024,
         500,
+        .earliest,
+        &metrics,
         allocator,
     );
     defer fetcher.deinit();
@@ -736,6 +739,7 @@ test "Fetcher with no assigned partitions returns empty" {
     var subscription = @import("subscription.zig").SubscriptionState.init(allocator);
     defer subscription.deinit();
 
+    var metrics = ConsumerMetrics{};
     var fetcher = try Fetcher.init(
         &broker_pool,
         &metadata,
@@ -744,6 +748,8 @@ test "Fetcher with no assigned partitions returns empty" {
         500,
         1024 * 1024,
         500,
+        .earliest,
+        &metrics,
         allocator,
     );
     defer fetcher.deinit();
@@ -764,7 +770,7 @@ test "canUseTopicIds returns false when topic has zero UUID" {
     // Add topic with zero UUID (default)
     const cache = @import("../metadata/cache.zig");
     var parts = [_]cache.PartitionEntry{
-        .{ .id = 0, .leader_id = 1 },
+        .{ .partition_id = 0, .leader_id = 1 },
     };
     metadata.updateTopic("test-topic", &parts);
 
@@ -772,9 +778,10 @@ test "canUseTopicIds returns false when topic has zero UUID" {
     const topic_parts = [_]tp.TopicPartition{
         .{ .topic = "test-topic", .partition = 0 },
     };
-    try subscription.assignPartitions(&topic_parts);
+    try subscription.assign(&topic_parts);
 
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, allocator);
+    var metrics = ConsumerMetrics{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
     defer fetcher.deinit();
 
     // Should return false - topic has zero UUID
@@ -793,7 +800,7 @@ test "canUseTopicIds returns true when all topics have non-zero UUIDs" {
     // Add topic
     const cache = @import("../metadata/cache.zig");
     var parts = [_]cache.PartitionEntry{
-        .{ .id = 0, .leader_id = 1 },
+        .{ .partition_id = 0, .leader_id = 1 },
     };
     metadata.updateTopic("test-topic", &parts);
 
@@ -812,9 +819,10 @@ test "canUseTopicIds returns true when all topics have non-zero UUIDs" {
     const topic_parts = [_]tp.TopicPartition{
         .{ .topic = "test-topic", .partition = 0 },
     };
-    try subscription.assignPartitions(&topic_parts);
+    try subscription.assign(&topic_parts);
 
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, allocator);
+    var metrics = ConsumerMetrics{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
     defer fetcher.deinit();
 
     // Should return true - topic has non-zero UUID
@@ -833,7 +841,7 @@ test "canUseTopicIds returns false when any topic lacks UUID" {
     // Add two topics
     const cache = @import("../metadata/cache.zig");
     var parts = [_]cache.PartitionEntry{
-        .{ .id = 0, .leader_id = 1 },
+        .{ .partition_id = 0, .leader_id = 1 },
     };
     metadata.updateTopic("topic-with-uuid", &parts);
     metadata.updateTopic("topic-without-uuid", &parts);
@@ -854,9 +862,10 @@ test "canUseTopicIds returns false when any topic lacks UUID" {
         .{ .topic = "topic-with-uuid", .partition = 0 },
         .{ .topic = "topic-without-uuid", .partition = 0 },
     };
-    try subscription.assignPartitions(&topic_parts);
+    try subscription.assign(&topic_parts);
 
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, allocator);
+    var metrics = ConsumerMetrics{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
     defer fetcher.deinit();
 
     // Should return false - one topic lacks UUID

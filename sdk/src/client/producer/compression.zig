@@ -16,7 +16,7 @@ pub fn compress(
         },
         .gzip => {
             // GZIP compression using std.compress.gzip
-            var compressed = std.ArrayList(u8).init(allocator);
+            var compressed = std.array_list.Managed(u8).init(allocator);
             errdefer compressed.deinit();
 
             var compressor = try std.compress.gzip.compressor(
@@ -67,7 +67,7 @@ pub fn decompress(
         },
         .gzip => {
             // GZIP decompression
-            var decompressed = std.ArrayList(u8).init(allocator);
+            var decompressed = std.array_list.Managed(u8).init(allocator);
             errdefer decompressed.deinit();
 
             var stream = std.io.fixedBufferStream(compressed_data);
