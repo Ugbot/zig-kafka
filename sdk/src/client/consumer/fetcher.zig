@@ -709,7 +709,7 @@ test "Fetcher init" {
     var subscription = @import("subscription.zig").SubscriptionState.init(allocator);
     defer subscription.deinit();
 
-    var metrics = ConsumerMetrics{};
+    var metrics: ConsumerMetrics = .{};
     var fetcher = try Fetcher.init(
         &broker_pool,
         &metadata,
@@ -718,7 +718,7 @@ test "Fetcher init" {
         500,
         1024 * 1024,
         500,
-        .earliest,
+        .latest,
         &metrics,
         allocator,
     );
@@ -739,7 +739,7 @@ test "Fetcher with no assigned partitions returns empty" {
     var subscription = @import("subscription.zig").SubscriptionState.init(allocator);
     defer subscription.deinit();
 
-    var metrics = ConsumerMetrics{};
+    var metrics: ConsumerMetrics = .{};
     var fetcher = try Fetcher.init(
         &broker_pool,
         &metadata,
@@ -748,7 +748,7 @@ test "Fetcher with no assigned partitions returns empty" {
         500,
         1024 * 1024,
         500,
-        .earliest,
+        .latest,
         &metrics,
         allocator,
     );
@@ -780,8 +780,8 @@ test "canUseTopicIds returns false when topic has zero UUID" {
     };
     try subscription.assign(&topic_parts);
 
-    var metrics = ConsumerMetrics{};
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
+        var test_metrics: ConsumerMetrics = .{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .latest, &test_metrics, allocator);
     defer fetcher.deinit();
 
     // Should return false - topic has zero UUID
@@ -821,8 +821,8 @@ test "canUseTopicIds returns true when all topics have non-zero UUIDs" {
     };
     try subscription.assign(&topic_parts);
 
-    var metrics = ConsumerMetrics{};
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
+        var test_metrics: ConsumerMetrics = .{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .latest, &test_metrics, allocator);
     defer fetcher.deinit();
 
     // Should return true - topic has non-zero UUID
@@ -864,8 +864,8 @@ test "canUseTopicIds returns false when any topic lacks UUID" {
     };
     try subscription.assign(&topic_parts);
 
-    var metrics = ConsumerMetrics{};
-    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .earliest, &metrics, allocator);
+        var test_metrics: ConsumerMetrics = .{};
+    var fetcher = try Fetcher.init(&broker_pool, &metadata, &subscription, 1, 500, 1048576, 500, .latest, &test_metrics, allocator);
     defer fetcher.deinit();
 
     // Should return false - one topic lacks UUID

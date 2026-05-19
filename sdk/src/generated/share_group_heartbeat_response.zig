@@ -10,6 +10,114 @@
 const std = @import("std");
 const types = @import("../protocol/types.zig");
 
+/// Nested struct: TopicPartitions
+pub const TopicPartitions = struct {
+    const Self = @This();
+
+    /// The topic ID.
+    /// Versions: 0+
+    topic_id: [16]u8 = [_]u8{0} ** 16,
+    /// The partitions.
+    /// Versions: 0+
+    partitions: ?[]i32 = null,
+
+    /// Tagged fields for forward compatibility
+    _tagged_fields: ?[]types.TaggedField = null,
+
+    pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+
+        // Field: TopicId
+        if (version >= 0 and version <= 32767) {
+            try types.encodeUuid(writer, self.topic_id);
+        }
+
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            if (is_flexible) {
+                try types.encodeCompactArrayNonNull(i32, writer, self.partitions, types.encodeInt32);
+            } else {
+                try types.encodeArrayNonNull(i32, writer, self.partitions, types.encodeInt32);
+            }
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                try types.encodeTaggedFields(writer, fields);
+            } else {
+                try types.encodeUnsignedVarInt(writer, 0);
+            }
+        }
+    }
+
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
+
+        // Field: TopicId
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeUuid(self.topic_id);
+        }
+
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            if (self.partitions) |arr| {
+                const len: u32 = @intCast(arr.len + 1);
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(len) else 4;
+                for (arr) |item| {
+                    total_size += types.computeSizeInt32(item);
+                }
+            } else {
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(1) else 4;
+            }
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
+    }
+
+    pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
+        var self: Self = .{};
+        // Field: TopicId
+        if (version >= 0 and version <= 32767) {
+            self.topic_id = try types.decodeUuid(reader);
+        }
+
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            self.partitions = if (is_flexible)
+                try types.decodeCompactPrimitiveArray(i32, reader, allocator, types.decodeInt32)
+            else
+                try types.decodePrimitiveArray(i32, reader, allocator, types.decodeInt32);
+        }
+
+
+        if (is_flexible) {
+            const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
+            self._tagged_fields = tagged_fields_data;
+        }
+        return self;
+    }
+
+    fn isFlexibleVersion(version: i16) bool {
+        const range = types.VersionRange.parse("0+") catch return false;
+        return range.contains(version);
+    }
+};
+
 /// Nested struct: Assignment
 pub const Assignment = struct {
     const Self = @This();

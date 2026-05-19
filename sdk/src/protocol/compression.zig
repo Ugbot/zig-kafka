@@ -200,26 +200,25 @@ pub fn decompressSnappy(allocator: mem.Allocator, compressed: []const u8) ![]u8 
 // ============================================================================
 
 pub fn decompressGzip(allocator: mem.Allocator, compressed: []const u8) ![]u8 {
-    var input_reader = std.Io.Reader.fixed(compressed);
-    var window_buf: [std.compress.flate.max_window_len]u8 = undefined;
-    var decompressor = std.compress.flate.Decompress.init(&input_reader, .gzip, &window_buf);
+    var stream = std.io.fixedBufferStream(compressed);
+    var decompressor = std.compress.gzip.decompressor(stream.reader());
 
-    var output = std.ArrayListUnmanaged(u8){};
-    errdefer output.deinit(allocator);
+    var output = std.array_list.Managed(u8).init(allocator);
+    errdefer output.deinit();
 
     // Read all decompressed data
     var buf: [4096]u8 = undefined;
     while (true) {
-        const n = decompressor.reader.readSliceShort(&buf) catch |err| {
+        const n = decompressor.read(&buf) catch |err| {
             log.warn("GZIP decompression error: {any}", .{err});
             return error.GzipDecompressError;
         };
         if (n == 0) break;
-        try output.appendSlice(allocator, buf[0..n]);
+        try output.appendSlice(buf[0..n]);
     }
 
     log.debug("GZIP: decompressed {} bytes to {} bytes", .{ compressed.len, output.items.len });
-    return try output.toOwnedSlice(allocator);
+    return try output.toOwnedSlice();
 }
 
 // ============================================================================

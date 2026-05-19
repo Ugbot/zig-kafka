@@ -349,7 +349,11 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            try types.encodeBytes(writer, self.records);
+            if (is_flexible) {
+                try types.encodeCompactBytes(writer, self.records);
+            } else {
+                try types.encodeBytes(writer, self.records);
+            }
         }
 
         // Field: AcquiredRecords
@@ -418,7 +422,7 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            total_size += types.computeSizeBytes(self.records);
+            total_size += if (is_flexible) types.computeSizeCompactBytes(self.records) else types.computeSizeBytes(self.records);
         }
 
         // Field: AcquiredRecords
@@ -488,7 +492,11 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            self.records = try types.decodeBytes(reader, allocator);
+            if (is_flexible) {
+                self.records = try types.decodeCompactBytes(reader, allocator);
+            } else {
+                self.records = try types.decodeBytes(reader, allocator);
+            }
         }
 
         // Field: AcquiredRecords

@@ -191,17 +191,12 @@ pub fn encodeArrayNonNull(comptime T: type, writer: anytype, value: ?[]const T, 
     }
 }
 
-/// Helper to call a decode function that may accept either 2 args (reader, allocator)
-/// or 3 args (reader, version, allocator). Generated protocol structs use the 3-arg
-/// form; primitive type decoders (e.g. decodeNonNullableCompactString) use 2 args.
-/// For 3-arg functions called without a known version, we pass version=0 which is
-/// safe because the caller (decodeArray/decodeCompactArray) has already selected the
-/// correct array encoding format.
+/// Call a decode function, handling both 2-arg (reader, allocator) and 3-arg (reader, version, allocator) signatures.
+/// Generated protocol structs use 3-arg decode; hand-written types may use 2-arg.
 fn callDecodeFn(comptime T: type, decodeFn: anytype, reader: anytype, allocator: std.mem.Allocator) !T {
-    const FnType = @TypeOf(decodeFn);
-    const fn_info = @typeInfo(FnType).@"fn";
-    if (fn_info.params.len == 3) {
-        // 3-arg: decode(reader, version, allocator)
+    const FnInfo = @typeInfo(@TypeOf(decodeFn)).@"fn";
+    if (FnInfo.params.len == 3) {
+        // 3-arg: decode(reader, version, allocator) — pass version 0 as default
         return decodeFn(reader, @as(i16, 0), allocator);
     } else {
         // 2-arg: decode(reader, allocator)

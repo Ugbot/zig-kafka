@@ -8,6 +8,11 @@ pub const rd_kafka_err2str = error_mod.rd_kafka_err2str;
 pub const rd_kafka_err2name = error_mod.rd_kafka_err2name;
 pub const rd_kafka_last_error = error_mod.rd_kafka_last_error;
 
+// Force Zig to evaluate the export directives in error.zig
+comptime {
+    _ = error_mod;
+}
+
 // Re-export types
 pub const rd_kafka_type_t = types.rd_kafka_type_t;
 pub const rd_kafka_conf_res_t = types.rd_kafka_conf_res_t;
@@ -216,7 +221,9 @@ export fn rd_kafka_commit(
 // Topic Partition List API
 //
 
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+// Zig 0.16: GeneralPurposeAllocator renamed to DebugAllocator. Use `.init`
+// constructor literal instead of the old `(.{}){}` pattern.
+var gpa: std.heap.DebugAllocator(.{}) = .init;
 const allocator = gpa.allocator();
 
 export fn rd_kafka_topic_partition_list_new(size: c_int) callconv(.c) ?*types.rd_kafka_topic_partition_list_t {

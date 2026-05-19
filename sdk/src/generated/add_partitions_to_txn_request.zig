@@ -14,34 +14,39 @@ const types = @import("../protocol/types.zig");
 pub const AddPartitionsToTxnTopic = struct {
     const Self = @This();
 
+    /// The name of the topic.
+    /// Versions: 0+
     name: []const u8 = "",
+    /// The partition indexes to add to the transaction.
+    /// Versions: 0+
     partitions: ?[]i32 = null,
+
+    /// Tagged fields for forward compatibility
     _tagged_fields: ?[]types.TaggedField = null,
 
     pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
         const is_flexible = isFlexibleVersion(version);
-        if (is_flexible) {
-            try types.encodeCompactString(writer, self.name);
-            if (self.partitions) |parts| {
-                const len: u32 = @intCast(parts.len + 1);
-                try types.encodeUnsignedVarInt(writer, len);
-                for (parts) |p| {
-                    try types.encodeInt32(writer, p);
-                }
+        _ = &is_flexible;
+
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            if (is_flexible) {
+                try types.encodeCompactString(writer, self.name);
             } else {
-                try types.encodeUnsignedVarInt(writer, 0);
-            }
-        } else {
-            try types.encodeString(writer, self.name);
-            if (self.partitions) |parts| {
-                try types.encodeInt32(writer, @intCast(parts.len));
-                for (parts) |p| {
-                    try types.encodeInt32(writer, p);
-                }
-            } else {
-                try types.encodeInt32(writer, -1);
+                try types.encodeString(writer, self.name);
             }
         }
+
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            if (is_flexible) {
+                try types.encodeCompactArrayNonNull(i32, writer, self.partitions, types.encodeInt32);
+            } else {
+                try types.encodeArrayNonNull(i32, writer, self.partitions, types.encodeInt32);
+            }
+        }
+
+
         if (is_flexible) {
             if (self._tagged_fields) |fields| {
                 try types.encodeTaggedFields(writer, fields);
@@ -51,44 +56,61 @@ pub const AddPartitionsToTxnTopic = struct {
         }
     }
 
-    pub fn computeSize(self: Self) usize {
-        var size: usize = types.computeSizeString(self.name);
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
 
-        if (self.partitions) |parts| {
-            size += 4; // array length
-            size += parts.len * 4; // partition IDs
-        } else {
-            size += 4;
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            total_size += if (is_flexible) types.computeSizeCompactString(self.name) else types.computeSizeString(self.name);
         }
 
-        return size;
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            if (self.partitions) |arr| {
+                const len: u32 = @intCast(arr.len + 1);
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(len) else 4;
+                for (arr) |item| {
+                    total_size += types.computeSizeInt32(item);
+                }
+            } else {
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(1) else 4;
+            }
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
     }
 
     pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
         const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
         var self: Self = .{};
-
-        if (is_flexible) {
-            self.name = try types.decodeCompactString(reader, allocator) orelse "";
-            const array_len = try types.decodeCompactArrayLen(reader);
-            if (array_len > 0) {
-                const array = try allocator.alloc(i32, array_len);
-                for (array) |*item| {
-                    item.* = try types.decodeInt32(reader);
-                }
-                self.partitions = array;
-            }
-        } else {
-            self.name = try types.decodeString(reader, allocator) orelse "";
-            const array_len = try types.decodeArrayLen(reader);
-            if (array_len > 0) {
-                const array = try allocator.alloc(i32, array_len);
-                for (array) |*item| {
-                    item.* = try types.decodeInt32(reader);
-                }
-                self.partitions = array;
-            }
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            self.name = if (is_flexible)
+                try types.decodeCompactString(reader, allocator) orelse ""
+            else
+                try types.decodeString(reader, allocator) orelse "";
         }
+
+        // Field: Partitions
+        if (version >= 0 and version <= 32767) {
+            self.partitions = if (is_flexible)
+                try types.decodeCompactPrimitiveArray(i32, reader, allocator, types.decodeInt32)
+            else
+                try types.decodePrimitiveArray(i32, reader, allocator, types.decodeInt32);
+        }
+
 
         if (is_flexible) {
             const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
@@ -157,19 +179,9 @@ pub const AddPartitionsToTxnTransaction = struct {
         // Field: Topics
         if (version >= 4 and version <= 32767) {
             if (is_flexible) {
-                try types.encodeCompactArrayLenNonNull(writer, self.topics);
-                if (self.topics) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopic.encode(item, writer, version);
-                    }
-                }
+                try types.encodeCompactArrayNonNull(AddPartitionsToTxnTopic, writer, self.topics, AddPartitionsToTxnTopic.encode);
             } else {
-                try types.encodeArrayLenNonNull(writer, self.topics);
-                if (self.topics) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopic.encode(item, writer, version);
-                    }
-                }
+                try types.encodeArrayNonNull(AddPartitionsToTxnTopic, writer, self.topics, AddPartitionsToTxnTopic.encode);
             }
         }
 
@@ -423,19 +435,9 @@ pub const AddPartitionsToTxnRequest = struct {
         // Field: V3AndBelowTopics
         if (version >= 0 and version <= 3) {
             if (is_flexible) {
-                try types.encodeCompactArrayLenNonNull(writer, self.v3_and_below_topics);
-                if (self.v3_and_below_topics) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopic.encode(item, writer, version);
-                    }
-                }
+                try types.encodeCompactArrayNonNull(AddPartitionsToTxnTopic, writer, self.v3_and_below_topics, AddPartitionsToTxnTopic.encode);
             } else {
-                try types.encodeArrayLenNonNull(writer, self.v3_and_below_topics);
-                if (self.v3_and_below_topics) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopic.encode(item, writer, version);
-                    }
-                }
+                try types.encodeArrayNonNull(AddPartitionsToTxnTopic, writer, self.v3_and_below_topics, AddPartitionsToTxnTopic.encode);
             }
         }
 

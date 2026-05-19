@@ -4,7 +4,7 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Import SDK module from parent
+    // Pull the sibling SDK module so we can link against it.
     const sdk_path = b.pathResolve(&.{ b.pathFromRoot("../sdk"), "src/lib.zig" });
     const sdk_generated_path = b.pathResolve(&.{ b.pathFromRoot("../sdk"), "src/generated_index.zig" });
 
@@ -21,50 +21,55 @@ pub fn build(b: *std.Build) void {
     });
     kafka.addImport("kafka_generated", kafka_generated);
 
-    // Create shared library (librdkafka.so / .dylib / .dll)
-    const c_module = b.createModule(.{
+    // librdkafka-shaped shared library. Zig 0.16: addSharedLibrary is gone;
+    // use addLibrary with linkage=.dynamic and a per-target root_module that
+    // carries target/optimize + link.libc.
+    const c_lib_module = b.createModule(.{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
-    c_module.addImport("kafka", kafka);
+    c_lib_module.addImport("kafka", kafka);
 
-    const c_lib = b.addSharedLibrary(.{
+    const c_lib = b.addLibrary(.{
         .name = "rdkafka",
-        .root_module = c_module,
+        .root_module = c_lib_module,
+        .linkage = .dynamic,
         .version = .{ .major = 2, .minor = 13, .patch = 0 },
     });
-    c_lib.linkLibC();
 
-    // Install library
     b.installArtifact(c_lib);
 
-    // Install headers
+    // Header bundle.
     const install_header = b.addInstallFile(
         b.path("include/rdkafka.h"),
         "include/rdkafka.h",
     );
     b.getInstallStep().dependOn(&install_header.step);
 
-    // Create a test executable that uses the C API
-    const c_test = b.addExecutable(.{
-        .name = "c-api-test",
-        .root_module = b.createModule(.{
-            .target = target,
-            .optimize = optimize,
-        }),
+    // C-side smoke test using the C API.
+    const c_test_module = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
     });
-    c_test.addCSourceFile(.{
+    c_test_module.addCSourceFile(.{
         .file = b.path("tests/c_api_test.c"),
         .flags = &.{"-std=c11"},
     });
-    c_test.linkLibrary(c_lib);
-    c_test.linkLibC();
-    c_test.addIncludePath(b.path("include"));
+    c_test_module.addIncludePath(b.path("include"));
+
+    // 0.16: linkLibrary lives on the Module, not on the Compile step.
+    c_test_module.linkLibrary(c_lib);
+
+    const c_test = b.addExecutable(.{
+        .name = "c-api-test",
+        .root_module = c_test_module,
+    });
 
     const install_test = b.addInstallArtifact(c_test, .{});
 
-    // Test step
     const test_step = b.step("test", "Run C API tests");
     test_step.dependOn(&install_test.step);
 

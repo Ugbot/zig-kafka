@@ -3,9 +3,155 @@
 
 const std = @import("std");
 const json = std.json;
-const fs = std.fs;
 const ArrayList = std.array_list.Managed;
 const Allocator = std.mem.Allocator;
+
+/// Writer adapter for `*ArrayList(u8)` so the generator's many existing
+/// `writer.print(...)` and `writer.writeAll(...)` callsites continue to
+/// work after Zig 0.16 removed `ArrayList.writer()`.
+///
+/// Returned by the (also-shimmed) `writer()` method below.
+const OutputWriter = struct {
+    list: *ArrayList(u8),
+
+    pub fn writeAll(self: OutputWriter, bytes: []const u8) !void {
+        try self.list.appendSlice(bytes);
+    }
+
+    pub fn print(self: OutputWriter, comptime fmt: []const u8, args: anytype) !void {
+        // Per-call stack buffer; protocol-gen output lines are well under 64K.
+        // Falls back to allocated buffer on overflow.
+        var buf: [65536]u8 = undefined;
+        if (std.fmt.bufPrint(&buf, fmt, args)) |slice| {
+            try self.list.appendSlice(slice);
+        } else |_| {
+            // NoSpaceLeft fallback — alloc big print.
+            const big = try std.fmt.allocPrint(self.list.allocator, fmt, args);
+            defer self.list.allocator.free(big);
+            try self.list.appendSlice(big);
+        }
+    }
+};
+
+/// Returns a writer adapter for the given list. Replaces 0.15-era
+/// `alWriter(output)`.
+fn alWriter(list: *ArrayList(u8)) OutputWriter {
+    return .{ .list = list };
+}
+
+/// Zig 0.16 stripped `std.fs.cwd().readFileAlloc/writeFile/openDir/makePath`
+/// from `std.fs`. The replacements live under `std.Io.Dir` but the surface
+/// is still in flux. This tool only needs four operations (read file, write
+/// file, list dir, mkdir-p) so wrap libc directly — same pragmatic approach
+/// `src/stdx_fs.zig` in the parent project uses while `std.Io.Dir` settles.
+const fs_compat = struct {
+    const c = std.c;
+
+    fn readFileAlloc(allocator: Allocator, path: []const u8, max_bytes: usize) ![]u8 {
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        const fd: c_int = @intCast(c.open(path_z.ptr, .{ .ACCMODE = .RDONLY }, @as(c_uint, 0)));
+        if (fd < 0) return error.OpenFailed;
+        defer _ = c.close(fd);
+
+        var st: c.Stat = undefined;
+        if (c.fstat(fd, &st) < 0) return error.StatFailed;
+        const size: usize = @intCast(st.size);
+        if (size > max_bytes) return error.FileTooLarge;
+
+        const buf = try allocator.alloc(u8, size);
+        errdefer allocator.free(buf);
+
+        var read_total: usize = 0;
+        while (read_total < size) {
+            const n = c.read(fd, buf[read_total..].ptr, size - read_total);
+            if (n < 0) return error.ReadFailed;
+            if (n == 0) break;
+            read_total += @intCast(n);
+        }
+        return buf[0..read_total];
+    }
+
+    fn writeFile(allocator: Allocator, path: []const u8, data: []const u8) !void {
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        const fd: c_int = @intCast(c.open(
+            path_z.ptr,
+            .{ .ACCMODE = .WRONLY, .CREAT = true, .TRUNC = true },
+            @as(c_uint, 0o644),
+        ));
+        if (fd < 0) return error.OpenFailed;
+        defer _ = c.close(fd);
+
+        var written: usize = 0;
+        while (written < data.len) {
+            const n = c.write(fd, data[written..].ptr, data.len - written);
+            if (n < 0) return error.WriteFailed;
+            if (n == 0) return error.WriteFailed;
+            written += @intCast(n);
+        }
+    }
+
+    fn makePath(allocator: Allocator, path: []const u8) !void {
+        // Recursive mkdir-p. Walks components and mkdirs each; EEXIST is OK.
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        var i: usize = 0;
+        while (i <= path_z.len) : (i += 1) {
+            if (i == path_z.len or path_z[i] == '/') {
+                if (i == 0) continue;
+                // Temporarily null-terminate at this position.
+                const saved = path_z[i];
+                path_z[i] = 0;
+                const rc = c.mkdir(path_z.ptr, 0o755);
+                path_z[i] = saved;
+                if (rc < 0) {
+                    const e = std.c._errno().*;
+                    if (e != @intFromEnum(std.posix.E.EXIST)) return error.MakePathFailed;
+                }
+            }
+        }
+    }
+
+    const Entry = struct {
+        name: []const u8, // owned by caller's allocator
+        is_file: bool,
+    };
+
+    /// List a directory. Returns owned entries (caller frees each .name + slice).
+    fn listDir(allocator: Allocator, path: []const u8) ![]Entry {
+        const path_z = try allocator.dupeZ(u8, path);
+        defer allocator.free(path_z);
+
+        const dirp = c.opendir(path_z.ptr) orelse return error.OpenDirFailed;
+        defer _ = c.closedir(dirp);
+
+        var out: std.array_list.Managed(Entry) = .init(allocator);
+        errdefer {
+            for (out.items) |e| allocator.free(e.name);
+            out.deinit();
+        }
+
+        while (c.readdir(dirp)) |ent_ptr| {
+            const name_ptr: [*:0]const u8 = @ptrCast(&ent_ptr.name);
+            const name_slice = std.mem.span(name_ptr);
+            if (std.mem.eql(u8, name_slice, ".") or std.mem.eql(u8, name_slice, "..")) continue;
+
+            // DT_REG = 8 on Linux/macOS. DT_UNKNOWN = 0 means caller should
+            // stat to learn the type; for our use (json spec files) we accept
+            // anything whose name ends in .json so this distinction is moot.
+            const is_file = ent_ptr.type == 8 or ent_ptr.type == 0;
+
+            const owned = try allocator.dupe(u8, name_slice);
+            try out.append(.{ .name = owned, .is_file = is_file });
+        }
+
+        return try out.toOwnedSlice();
+    }
+};
 
 /// Field specification from JSON
 const FieldSpec = struct {
@@ -29,6 +175,14 @@ const NestedStruct = struct {
 };
 
 /// Message specification from JSON
+/// A reusable struct definition declared at the top level of a spec JSON
+/// under `commonStructs`. Modelled like an unnested NestedStruct.
+const CommonStruct = struct {
+    name: []const u8,
+    versions: []const u8,
+    fields: []const FieldSpec,
+};
+
 const MessageSpec = struct {
     apiKey: ?i16 = null,
     type: []const u8,
@@ -36,11 +190,15 @@ const MessageSpec = struct {
     validVersions: []const u8,
     flexibleVersions: ?[]const u8 = null,
     fields: []const FieldSpec,
+    /// Struct definitions reused across multiple fields. Kafka uses this for
+    /// things like AddPartitionsToTxnTopic that appear both at the top level
+    /// (v4+) and inside V3AndBelowTopics (v0..3).
+    commonStructs: ?[]const CommonStruct = null,
 };
 
 /// Generate from a single JSON file
 pub fn generateFromFile(allocator: Allocator, json_path: []const u8, output_path: []const u8) !void {
-    const json_content = try fs.cwd().readFileAlloc(allocator, json_path, 1024 * 1024);
+    const json_content = try fs_compat.readFileAlloc(allocator, json_path, 1024 * 1024);
     defer allocator.free(json_content);
 
     const parsed = try json.parseFromSlice(MessageSpec, allocator, json_content, .{
@@ -56,27 +214,26 @@ pub fn generateFromFile(allocator: Allocator, json_path: []const u8, output_path
 
     try generateMessage(&output, spec, allocator);
 
-    try fs.cwd().writeFile(.{
-        .sub_path = output_path,
-        .data = output.items,
-    });
+    try fs_compat.writeFile(allocator, output_path, output.items);
 
-    std.debug.print("✅ Generated {s} from {s}\n", .{ output_path, json_path });
+    std.debug.print("Generated {s} from {s}\n", .{ output_path, json_path });
 }
 
 /// Generate from directory
 pub fn generateFromDirectory(allocator: Allocator, specs_dir: []const u8, output_dir: []const u8) !void {
-    var dir = try fs.cwd().openDir(specs_dir, .{ .iterate = true });
-    defer dir.close();
+    try fs_compat.makePath(allocator, output_dir);
 
-    var iterator = dir.iterate();
+    const entries = try fs_compat.listDir(allocator, specs_dir);
+    defer {
+        for (entries) |e| allocator.free(e.name);
+        allocator.free(entries);
+    }
+
     var generated_count: u32 = 0;
     var failed_count: u32 = 0;
 
-    try fs.cwd().makePath(output_dir);
-
-    while (try iterator.next()) |entry| {
-        if (entry.kind != .file) continue;
+    for (entries) |entry| {
+        if (!entry.is_file) continue;
         if (!std.mem.endsWith(u8, entry.name, ".json")) continue;
 
         const json_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ specs_dir, entry.name });
@@ -113,6 +270,20 @@ fn generateMessage(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocat
     defer nested_structs.deinit();
     try collectNestedStructs(spec.fields, &nested_structs, allocator);
 
+    // Common structs declared at the spec root (Kafka `commonStructs`)
+    // are emitted just like nested structs. Their own fields may also
+    // contain nested types, so recurse and pick those up too.
+    if (spec.commonStructs) |common| {
+        for (common) |cs| {
+            try collectNestedStructs(cs.fields, &nested_structs, allocator);
+            try nested_structs.append(.{
+                .name = cs.name,
+                .fields = cs.fields,
+                .versions = cs.versions,
+            });
+        }
+    }
+
     // Generate nested structs (innermost first)
     var i = nested_structs.items.len;
     while (i > 0) {
@@ -142,7 +313,7 @@ fn generateMessage(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocat
 }
 
 fn generateFileHeader(output: *ArrayList(u8), spec: MessageSpec) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\//! Auto-generated Kafka protocol message
@@ -167,17 +338,17 @@ fn generateFileHeader(output: *ArrayList(u8), spec: MessageSpec) !void {
 }
 
 fn generateImports(output: *ArrayList(u8)) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
     try writer.writeAll(
         \\const std = @import("std");
-        \\const types = @import("../src/types.zig");
+        \\const types = @import("../protocol/types.zig");
         \\
         \\
     );
 }
 
 fn generateStruct(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print("/// {s}\n", .{spec.name});
     try writer.print("pub const {s} = struct {{\n", .{spec.name});
@@ -218,7 +389,7 @@ fn generateStruct(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocato
 
 // NEW: Generate version metadata constants
 fn generateVersionMetadata(output: *ArrayList(u8), spec: MessageSpec) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     const version_range = try parseVersionRange(spec.validVersions);
 
@@ -243,7 +414,7 @@ fn generateVersionMetadata(output: *ArrayList(u8), spec: MessageSpec) !void {
 
 // NEW: Generate default() function
 fn generateDefaultFunction(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\    /// Create a default instance of {s}
@@ -275,7 +446,7 @@ fn generateDefaultFunction(output: *ArrayList(u8), spec: MessageSpec, allocator:
 
 // NEW: Generate builder pattern methods (with_* functions)
 fn generateBuilderMethods(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     for (spec.fields) |field| {
         const field_name = try toSnakeCase(allocator, field.name);
@@ -310,7 +481,7 @@ fn generateBuilderMethods(output: *ArrayList(u8), spec: MessageSpec, allocator: 
 
 // NEW: Generate computeSize() function
 fn generateComputeSizeFunction(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\    /// Compute the size of {s} for the given version
@@ -557,12 +728,11 @@ fn generateFieldComputeSize(writer: anytype, field: FieldSpec, allocator: Alloca
                 , .{ compute_fn, field_name, non_compact_fn, field_name });
             }
         } else if (std.mem.eql(u8, field.type, "records")) {
-            // Records type ALWAYS uses i32 length prefix (NULLABLE_BYTES),
-            // even in flexible versions.
+            // Records: matches the encode/decode choice.
             try writer.print(
-                \\            total_size += types.computeSizeBytes(self.{s});
+                \\            total_size += if (is_flexible) types.computeSizeCompactBytes(self.{s}) else types.computeSizeBytes(self.{s});
                 \\
-            , .{field_name});
+            , .{ field_name, field_name });
         } else {
             // Custom struct - needs version parameter
             try writer.print("            total_size += try {s}(&self.{s}, version);\n", .{ compute_fn, field_name });
@@ -573,7 +743,7 @@ fn generateFieldComputeSize(writer: anytype, field: FieldSpec, allocator: Alloca
 }
 
 fn generateEncodeFunction(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\    /// Encode {s}
@@ -849,13 +1019,17 @@ fn generateFieldEncode(writer: anytype, field: FieldSpec, allocator: Allocator) 
                 , .{ encode_fn, field_name, non_compact_fn, field_name });
             }
         } else if (std.mem.eql(u8, field.type, "records")) {
-            // Records type ALWAYS uses i32 length prefix (NULLABLE_BYTES),
-            // even in flexible versions. Per Kafka protocol spec, the
-            // "records" type never uses compact encoding.
+            // RECORDS encoder: i32 length in non-flexible, COMPACT_BYTES
+            // (uvarint length+1) in flexible. See decode branch for the
+            // matching read path and tansu-sans-io ser.rs/de.rs.
             try writer.print(
-                \\            try types.encodeBytes(writer, self.{s});
+                \\            if (is_flexible) {{
+                \\                try types.encodeCompactBytes(writer, self.{s});
+                \\            }} else {{
+                \\                try types.encodeBytes(writer, self.{s});
+                \\            }}
                 \\
-            , .{field_name});
+            , .{ field_name, field_name });
         } else {
             // Custom struct - needs version parameter
             try writer.print("            try {s}(&self.{s}, writer, version);\n", .{ encode_fn, field_name });
@@ -866,7 +1040,7 @@ fn generateFieldEncode(writer: anytype, field: FieldSpec, allocator: Allocator) 
 }
 
 fn generateDecodeFunction(output: *ArrayList(u8), spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\    /// Decode {s}
@@ -1141,19 +1315,32 @@ fn generateFieldDecode(writer: anytype, field: FieldSpec, allocator: Allocator) 
                 , .{ field_name, decode_fn, non_compact_fn });
             }
         } else if (std.mem.eql(u8, field.type, "records")) {
-            // Records type ALWAYS uses i32 length prefix (NULLABLE_BYTES),
-            // even in flexible versions. Per Kafka protocol spec, the
-            // "records" type never uses compact encoding.
+            // RECORDS field: nullable bytes blob.
+            //   - Non-flexible versions (typically v0..v8 for Produce, v0..v11
+            //     for Fetch): i32 length prefix.
+            //   - Flexible versions (9+ Produce / 12+ Fetch etc.): COMPACT_BYTES
+            //     — uvarint(length+1) prefix, 0 = null.
+            // The generator MUST emit the version-conditional choice. The prior
+            // version emitted decodeBytes unconditionally, which silently lost
+            // every record batch on flexible-version connections.
             if (isNullable(field)) {
                 try writer.print(
-                    \\            self.{s} = try types.decodeBytes(reader, allocator);
+                    \\            if (is_flexible) {{
+                    \\                self.{s} = try types.decodeCompactBytes(reader, allocator);
+                    \\            }} else {{
+                    \\                self.{s} = try types.decodeBytes(reader, allocator);
+                    \\            }}
                     \\
-                , .{field_name});
+                , .{ field_name, field_name });
             } else {
                 try writer.print(
-                    \\            self.{s} = try types.decodeBytes(reader, allocator) orelse "";
+                    \\            if (is_flexible) {{
+                    \\                self.{s} = (try types.decodeCompactBytes(reader, allocator)) orelse "";
+                    \\            }} else {{
+                    \\                self.{s} = (try types.decodeBytes(reader, allocator)) orelse "";
+                    \\            }}
                     \\
-                , .{field_name});
+                , .{ field_name, field_name });
             }
         } else {
             // Custom struct - needs reader, version, allocator
@@ -1165,7 +1352,7 @@ fn generateFieldDecode(writer: anytype, field: FieldSpec, allocator: Allocator) 
 }
 
 fn generateUtilityFunctions(output: *ArrayList(u8), spec: MessageSpec) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print(
         \\    /// Check if version is valid
@@ -1259,7 +1446,7 @@ fn extractTypeName(allocator: Allocator, type_str: []const u8) ![]u8 {
 }
 
 fn generateNestedStruct(output: *ArrayList(u8), nested: NestedStruct, parent_spec: MessageSpec, allocator: Allocator) !void {
-    const writer = output.writer();
+    const writer = alWriter(output);
 
     try writer.print("/// Nested struct: {s}\n", .{nested.name});
     try writer.print("pub const {s} = struct {{\n", .{nested.name});

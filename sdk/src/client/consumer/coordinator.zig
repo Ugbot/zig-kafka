@@ -431,7 +431,7 @@ pub const GroupCoordinator = struct {
                 self.last_heartbeat_ms.store(now_ms, .release);
             }
 
-            std.time.sleep(100 * std.time.ns_per_ms); // Sleep 100ms
+            std.Thread.sleep(100 * std.time.ns_per_ms); // Sleep 100ms
         }
     }
 

@@ -385,7 +385,6 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            // BUGFIX: Use compact encoding for flexible versions (v12+)
             if (is_flexible) {
                 try types.encodeCompactBytes(writer, self.records);
             } else {
@@ -453,12 +452,7 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            // BUGFIX: Use compact encoding for flexible versions (v12+)
-            if (is_flexible) {
-                total_size += types.computeSizeCompactBytes(self.records);
-            } else {
-                total_size += types.computeSizeBytes(self.records);
-            }
+            total_size += if (is_flexible) types.computeSizeCompactBytes(self.records) else types.computeSizeBytes(self.records);
         }
 
 
@@ -527,9 +521,6 @@ pub const PartitionData = struct {
 
         // Field: Records
         if (version >= 0 and version <= 32767) {
-            // BUGFIX: Use compact encoding for flexible versions (v12+)
-            // See: https://github.com/apache/kafka/blob/trunk/clients/src/main/resources/common/message/FetchResponse.json
-            // Records field should use compact bytes in flexible versions
             if (is_flexible) {
                 self.records = try types.decodeCompactBytes(reader, allocator);
             } else {

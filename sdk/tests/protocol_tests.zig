@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const kafka = @import("zig-kafka");
+const kafka = @import("kafka");
 
 test "protocol types compile" {
     // Ensure all protocol types are accessible

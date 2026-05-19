@@ -66,7 +66,7 @@ pub const messages = struct {
 // Wire protocol layer
 pub const wire = struct {
     pub const BrokerPool = @import("wire/broker_pool.zig").BrokerPool;
-    pub const Connection = @import("wire/connection.zig").Connection;
+    pub const Connection = @import("wire/connection.zig").BrokerConnection;
     pub const request = @import("wire/request.zig");
     pub const response = @import("wire/response.zig");
     pub const api_versions = @import("wire/api_versions.zig");

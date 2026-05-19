@@ -9,6 +9,99 @@
 const std = @import("std");
 const types = @import("../protocol/types.zig");
 
+/// Nested struct: Voter
+pub const Voter = struct {
+    const Self = @This();
+
+    /// The ID of the voter.
+    /// Versions: 0+
+    voter_id: i32 = 0,
+    /// The directory id of the voter.
+    /// Versions: 1+
+    voter_directory_id: [16]u8 = [_]u8{0} ** 16,
+
+    /// Tagged fields for forward compatibility
+    _tagged_fields: ?[]types.TaggedField = null,
+
+    pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+
+        // Field: VoterId
+        if (version >= 0 and version <= 32767) {
+            try types.encodeInt32(writer, self.voter_id);
+        }
+
+        // Field: VoterDirectoryId
+        if (version >= 1 and version <= 32767) {
+            try types.encodeUuid(writer, self.voter_directory_id);
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                try types.encodeTaggedFields(writer, fields);
+            } else {
+                try types.encodeUnsignedVarInt(writer, 0);
+            }
+        }
+    }
+
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
+
+        // Field: VoterId
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeInt32(self.voter_id);
+        }
+
+        // Field: VoterDirectoryId
+        if (version >= 1 and version <= 32767) {
+            total_size += types.computeSizeUuid(self.voter_directory_id);
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
+    }
+
+    pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
+        var self: Self = .{};
+        // Field: VoterId
+        if (version >= 0 and version <= 32767) {
+            self.voter_id = try types.decodeInt32(reader);
+        }
+
+        // Field: VoterDirectoryId
+        if (version >= 1 and version <= 32767) {
+            self.voter_directory_id = try types.decodeUuid(reader);
+        }
+
+
+        if (is_flexible) {
+            const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
+            self._tagged_fields = tagged_fields_data;
+        }
+        return self;
+    }
+
+    fn isFlexibleVersion(version: i16) bool {
+        const range = types.VersionRange.parse("0+") catch return false;
+        return range.contains(version);
+    }
+};
+
 /// LeaderChangeMessage
 pub const LeaderChangeMessage = struct {
     const Self = @This();

@@ -10,6 +10,153 @@
 const std = @import("std");
 const types = @import("../protocol/types.zig");
 
+/// Nested struct: ReplicaState
+pub const ReplicaState = struct {
+    const Self = @This();
+
+    /// The ID of the replica.
+    /// Versions: 0+
+    replica_id: i32 = 0,
+    /// The replica directory ID of the replica.
+    /// Versions: 2+
+    replica_directory_id: [16]u8 = [_]u8{0} ** 16,
+    /// The last known log end offset of the follower or -1 if it is unknown.
+    /// Versions: 0+
+    log_end_offset: i64 = 0,
+    /// The last known leader wall clock time time when a follower fetched from the leader. This is reported as -1 both for the current leader or if it is unknown for a voter.
+    /// Versions: 1+
+    last_fetch_timestamp: i64 = -1,
+    /// The leader wall clock append time of the offset for which the follower made the most recent fetch request. This is reported as the current time for the leader and -1 if unknown for a voter.
+    /// Versions: 1+
+    last_caught_up_timestamp: i64 = -1,
+
+    /// Tagged fields for forward compatibility
+    _tagged_fields: ?[]types.TaggedField = null,
+
+    pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+
+        // Field: ReplicaId
+        if (version >= 0 and version <= 32767) {
+            try types.encodeInt32(writer, self.replica_id);
+        }
+
+        // Field: ReplicaDirectoryId
+        if (version >= 2 and version <= 32767) {
+            try types.encodeUuid(writer, self.replica_directory_id);
+        }
+
+        // Field: LogEndOffset
+        if (version >= 0 and version <= 32767) {
+            try types.encodeInt64(writer, self.log_end_offset);
+        }
+
+        // Field: LastFetchTimestamp
+        if (version >= 1 and version <= 32767) {
+            try types.encodeInt64(writer, self.last_fetch_timestamp);
+        }
+
+        // Field: LastCaughtUpTimestamp
+        if (version >= 1 and version <= 32767) {
+            try types.encodeInt64(writer, self.last_caught_up_timestamp);
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                try types.encodeTaggedFields(writer, fields);
+            } else {
+                try types.encodeUnsignedVarInt(writer, 0);
+            }
+        }
+    }
+
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
+
+        // Field: ReplicaId
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeInt32(self.replica_id);
+        }
+
+        // Field: ReplicaDirectoryId
+        if (version >= 2 and version <= 32767) {
+            total_size += types.computeSizeUuid(self.replica_directory_id);
+        }
+
+        // Field: LogEndOffset
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeInt64(self.log_end_offset);
+        }
+
+        // Field: LastFetchTimestamp
+        if (version >= 1 and version <= 32767) {
+            total_size += types.computeSizeInt64(self.last_fetch_timestamp);
+        }
+
+        // Field: LastCaughtUpTimestamp
+        if (version >= 1 and version <= 32767) {
+            total_size += types.computeSizeInt64(self.last_caught_up_timestamp);
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
+    }
+
+    pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
+        var self: Self = .{};
+        // Field: ReplicaId
+        if (version >= 0 and version <= 32767) {
+            self.replica_id = try types.decodeInt32(reader);
+        }
+
+        // Field: ReplicaDirectoryId
+        if (version >= 2 and version <= 32767) {
+            self.replica_directory_id = try types.decodeUuid(reader);
+        }
+
+        // Field: LogEndOffset
+        if (version >= 0 and version <= 32767) {
+            self.log_end_offset = try types.decodeInt64(reader);
+        }
+
+        // Field: LastFetchTimestamp
+        if (version >= 1 and version <= 32767) {
+            self.last_fetch_timestamp = try types.decodeInt64(reader);
+        }
+
+        // Field: LastCaughtUpTimestamp
+        if (version >= 1 and version <= 32767) {
+            self.last_caught_up_timestamp = try types.decodeInt64(reader);
+        }
+
+
+        if (is_flexible) {
+            const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
+            self._tagged_fields = tagged_fields_data;
+        }
+        return self;
+    }
+
+    fn isFlexibleVersion(version: i16) bool {
+        const range = types.VersionRange.parse("0+") catch return false;
+        return range.contains(version);
+    }
+};
+
 /// Nested struct: Node
 pub const Node = struct {
     const Self = @This();

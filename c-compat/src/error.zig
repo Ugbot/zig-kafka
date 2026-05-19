@@ -224,19 +224,16 @@ const error_strings = std.StaticStringMap([]const u8).initComptime(.{
     .{ "INVALID_REPLICATION_FACTOR", "Broker: Invalid replication factor" },
 });
 
-export fn rd_kafka_err2str(err: rd_kafka_resp_err_t) callconv(.C) [*:0]const u8 {
-    const name = @tagName(err);
-    if (error_strings.get(name)) |str| {
-        return str.ptr;
-    }
-    return "Unknown error";
-}
-
-export fn rd_kafka_err2name(err: rd_kafka_resp_err_t) callconv(.C) [*:0]const u8 {
+export fn rd_kafka_err2str(err: rd_kafka_resp_err_t) callconv(.c) [*:0]const u8 {
+    // @tagName returns a comptime string literal (sentinel-terminated)
     return @tagName(err).ptr;
 }
 
-export fn rd_kafka_last_error() callconv(.C) rd_kafka_resp_err_t {
+export fn rd_kafka_err2name(err: rd_kafka_resp_err_t) callconv(.c) [*:0]const u8 {
+    return @tagName(err).ptr;
+}
+
+export fn rd_kafka_last_error() callconv(.c) rd_kafka_resp_err_t {
     // Return thread-local error if we implement that later
     return .NO_ERROR;
 }

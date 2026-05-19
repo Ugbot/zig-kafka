@@ -14,14 +14,31 @@ const types = @import("../protocol/types.zig");
 pub const AddPartitionsToTxnPartitionResult = struct {
     const Self = @This();
 
+    /// The partition indexes.
+    /// Versions: 0+
     partition_index: i32 = 0,
+    /// The response error code.
+    /// Versions: 0+
     partition_error_code: i16 = 0,
+
+    /// Tagged fields for forward compatibility
     _tagged_fields: ?[]types.TaggedField = null,
 
     pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
         const is_flexible = isFlexibleVersion(version);
-        try types.encodeInt32(writer, self.partition_index);
-        try types.encodeInt16(writer, self.partition_error_code);
+        _ = &is_flexible;
+
+        // Field: PartitionIndex
+        if (version >= 0 and version <= 32767) {
+            try types.encodeInt32(writer, self.partition_index);
+        }
+
+        // Field: PartitionErrorCode
+        if (version >= 0 and version <= 32767) {
+            try types.encodeInt16(writer, self.partition_error_code);
+        }
+
+
         if (is_flexible) {
             if (self._tagged_fields) |fields| {
                 try types.encodeTaggedFields(writer, fields);
@@ -31,16 +48,48 @@ pub const AddPartitionsToTxnPartitionResult = struct {
         }
     }
 
-    pub fn computeSize(self: Self) usize {
-        _ = self;
-        return 4 + 2; // partition_index + partition_error_code
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
+
+        // Field: PartitionIndex
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeInt32(self.partition_index);
+        }
+
+        // Field: PartitionErrorCode
+        if (version >= 0 and version <= 32767) {
+            total_size += types.computeSizeInt16(self.partition_error_code);
+        }
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
     }
 
     pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
         const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
         var self: Self = .{};
-        self.partition_index = try types.decodeInt32(reader);
-        self.partition_error_code = try types.decodeInt16(reader);
+        // Field: PartitionIndex
+        if (version >= 0 and version <= 32767) {
+            self.partition_index = try types.decodeInt32(reader);
+        }
+
+        // Field: PartitionErrorCode
+        if (version >= 0 and version <= 32767) {
+            self.partition_error_code = try types.decodeInt16(reader);
+        }
+
+
         if (is_flexible) {
             const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
             self._tagged_fields = tagged_fields_data;
@@ -58,29 +107,39 @@ pub const AddPartitionsToTxnPartitionResult = struct {
 pub const AddPartitionsToTxnTopicResult = struct {
     const Self = @This();
 
+    /// The topic name.
+    /// Versions: 0+
     name: []const u8 = "",
+    /// The results for each partition.
+    /// Versions: 0+
     results_by_partition: ?[]AddPartitionsToTxnPartitionResult = null,
+
+    /// Tagged fields for forward compatibility
     _tagged_fields: ?[]types.TaggedField = null,
 
     pub fn encode(self: *const Self, writer: anytype, version: i16) !void {
         const is_flexible = isFlexibleVersion(version);
-        if (is_flexible) {
-            try types.encodeCompactString(writer, self.name);
-            try types.encodeCompactArrayLenNonNull(writer, self.results_by_partition);
-            if (self.results_by_partition) |arr| {
-                for (arr) |*item| {
-                    try AddPartitionsToTxnPartitionResult.encode(item, writer, version);
-                }
-            }
-        } else {
-            try types.encodeString(writer, self.name);
-            try types.encodeArrayLenNonNull(writer, self.results_by_partition);
-            if (self.results_by_partition) |arr| {
-                for (arr) |*item| {
-                    try AddPartitionsToTxnPartitionResult.encode(item, writer, version);
-                }
+        _ = &is_flexible;
+
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            if (is_flexible) {
+                try types.encodeCompactString(writer, self.name);
+            } else {
+                try types.encodeString(writer, self.name);
             }
         }
+
+        // Field: ResultsByPartition
+        if (version >= 0 and version <= 32767) {
+            if (is_flexible) {
+                try types.encodeCompactArrayNonNull(AddPartitionsToTxnPartitionResult, writer, self.results_by_partition, AddPartitionsToTxnPartitionResult.encode);
+            } else {
+                try types.encodeArrayNonNull(AddPartitionsToTxnPartitionResult, writer, self.results_by_partition, AddPartitionsToTxnPartitionResult.encode);
+            }
+        }
+
+
         if (is_flexible) {
             if (self._tagged_fields) |fields| {
                 try types.encodeTaggedFields(writer, fields);
@@ -90,26 +149,62 @@ pub const AddPartitionsToTxnTopicResult = struct {
         }
     }
 
-    pub fn computeSize(self: Self) usize {
-        var size: usize = types.computeSizeString(self.name) + 4;
-        if (self.results_by_partition) |arr| {
-            for (arr) |item| {
-                size += item.computeSize();
+    pub fn computeSize(self: *const Self, version: i16) !usize {
+        const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        var total_size: usize = 0;
+
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            total_size += if (is_flexible) types.computeSizeCompactString(self.name) else types.computeSizeString(self.name);
+        }
+
+        // Field: ResultsByPartition
+        if (version >= 0 and version <= 32767) {
+            if (self.results_by_partition) |arr| {
+                const len: u32 = @intCast(arr.len + 1);
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(len) else 4;
+                for (arr) |item| {
+                    total_size += AddPartitionsToTxnPartitionResult.computeSize(item);
+                }
+            } else {
+                total_size += if (is_flexible) types.computeSizeUnsignedVarInt(1) else 4;
             }
         }
-        return size;
+
+
+        if (is_flexible) {
+            if (self._tagged_fields) |fields| {
+                total_size += types.computeSizeTaggedFields(fields);
+            } else {
+                total_size += 1; // Empty tagged fields marker
+            }
+        }
+        return total_size;
     }
 
     pub fn decode(reader: anytype, version: i16, allocator: std.mem.Allocator) !Self {
         const is_flexible = isFlexibleVersion(version);
+        _ = &is_flexible;
+        _ = &allocator;
         var self: Self = .{};
-        if (is_flexible) {
-            self.name = try types.decodeCompactString(reader, allocator) orelse "";
-            self.results_by_partition = try types.decodeCompactArray(AddPartitionsToTxnPartitionResult, reader, allocator, AddPartitionsToTxnPartitionResult.decode);
-        } else {
-            self.name = try types.decodeString(reader, allocator) orelse "";
-            self.results_by_partition = try types.decodeArray(AddPartitionsToTxnPartitionResult, reader, allocator, AddPartitionsToTxnPartitionResult.decode);
+        // Field: Name
+        if (version >= 0 and version <= 32767) {
+            self.name = if (is_flexible)
+                try types.decodeCompactString(reader, allocator) orelse ""
+            else
+                try types.decodeString(reader, allocator) orelse "";
         }
+
+        // Field: ResultsByPartition
+        if (version >= 0 and version <= 32767) {
+            self.results_by_partition = if (is_flexible)
+                try types.decodeCompactArray(AddPartitionsToTxnPartitionResult, reader, allocator, AddPartitionsToTxnPartitionResult.decode)
+            else
+                try types.decodeArray(AddPartitionsToTxnPartitionResult, reader, allocator, AddPartitionsToTxnPartitionResult.decode);
+        }
+
+
         if (is_flexible) {
             const tagged_fields_data = try types.decodeTaggedFields(reader, allocator);
             self._tagged_fields = tagged_fields_data;
@@ -153,19 +248,9 @@ pub const AddPartitionsToTxnResult = struct {
         // Field: TopicResults
         if (version >= 4 and version <= 32767) {
             if (is_flexible) {
-                try types.encodeCompactArrayLenNonNull(writer, self.topic_results);
-                if (self.topic_results) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopicResult.encode(item, writer, version);
-                    }
-                }
+                try types.encodeCompactArrayNonNull(AddPartitionsToTxnTopicResult, writer, self.topic_results, AddPartitionsToTxnTopicResult.encode);
             } else {
-                try types.encodeArrayLenNonNull(writer, self.topic_results);
-                if (self.topic_results) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopicResult.encode(item, writer, version);
-                    }
-                }
+                try types.encodeArrayNonNull(AddPartitionsToTxnTopicResult, writer, self.topic_results, AddPartitionsToTxnTopicResult.encode);
             }
         }
 
@@ -228,14 +313,10 @@ pub const AddPartitionsToTxnResult = struct {
 
         // Field: TopicResults
         if (version >= 4 and version <= 32767) {
-            const array_len = if (is_flexible) try types.decodeCompactArrayLen(reader) else try types.decodeArrayLen(reader);
-            if (array_len > 0) {
-                const array = try allocator.alloc(AddPartitionsToTxnTopicResult, array_len);
-                for (array) |*item| {
-                    item.* = try AddPartitionsToTxnTopicResult.decode(reader, version, allocator);
-                }
-                self.topic_results = array;
-            }
+            self.topic_results = if (is_flexible)
+                try types.decodeCompactArray(AddPartitionsToTxnTopicResult, reader, allocator, AddPartitionsToTxnTopicResult.decode)
+            else
+                try types.decodeArray(AddPartitionsToTxnTopicResult, reader, allocator, AddPartitionsToTxnTopicResult.decode);
         }
 
 
@@ -369,19 +450,9 @@ pub const AddPartitionsToTxnResponse = struct {
         // Field: ResultsByTopicV3AndBelow
         if (version >= 0 and version <= 3) {
             if (is_flexible) {
-                try types.encodeCompactArrayLenNonNull(writer, self.results_by_topic_v3_and_below);
-                if (self.results_by_topic_v3_and_below) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopicResult.encode(item, writer, version);
-                    }
-                }
+                try types.encodeCompactArrayNonNull(AddPartitionsToTxnTopicResult, writer, self.results_by_topic_v3_and_below, AddPartitionsToTxnTopicResult.encode);
             } else {
-                try types.encodeArrayLenNonNull(writer, self.results_by_topic_v3_and_below);
-                if (self.results_by_topic_v3_and_below) |arr| {
-                    for (arr) |*item| {
-                        try AddPartitionsToTxnTopicResult.encode(item, writer, version);
-                    }
-                }
+                try types.encodeArrayNonNull(AddPartitionsToTxnTopicResult, writer, self.results_by_topic_v3_and_below, AddPartitionsToTxnTopicResult.encode);
             }
         }
 

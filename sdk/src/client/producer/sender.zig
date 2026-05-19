@@ -154,7 +154,7 @@ pub const Sender = struct {
                 std.debug.print("[SENDER] Still running, iteration {d}\n", .{iterations});
             }
             self.runOnce(std.heap.page_allocator);
-            std.time.sleep(1_000_000); // 1ms sleep between iterations
+            std.Thread.sleep(1_000_000); // 1ms sleep between iterations
         }
         std.debug.print("[SENDER] Background thread stopped after {d} iterations\n", .{iterations});
     }

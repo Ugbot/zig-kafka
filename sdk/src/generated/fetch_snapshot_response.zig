@@ -312,7 +312,11 @@ pub const PartitionSnapshot = struct {
 
         // Field: UnalignedRecords
         if (version >= 0 and version <= 32767) {
-            try types.encodeBytes(writer, self.unaligned_records);
+            if (is_flexible) {
+                try types.encodeCompactBytes(writer, self.unaligned_records);
+            } else {
+                try types.encodeBytes(writer, self.unaligned_records);
+            }
         }
 
 
@@ -357,7 +361,7 @@ pub const PartitionSnapshot = struct {
 
         // Field: UnalignedRecords
         if (version >= 0 and version <= 32767) {
-            total_size += types.computeSizeBytes(self.unaligned_records);
+            total_size += if (is_flexible) types.computeSizeCompactBytes(self.unaligned_records) else types.computeSizeBytes(self.unaligned_records);
         }
 
 
@@ -403,7 +407,11 @@ pub const PartitionSnapshot = struct {
 
         // Field: UnalignedRecords
         if (version >= 0 and version <= 32767) {
-            self.unaligned_records = try types.decodeBytes(reader, allocator) orelse "";
+            if (is_flexible) {
+                self.unaligned_records = (try types.decodeCompactBytes(reader, allocator)) orelse "";
+            } else {
+                self.unaligned_records = (try types.decodeBytes(reader, allocator)) orelse "";
+            }
         }
 
 
