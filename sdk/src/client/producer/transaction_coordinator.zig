@@ -81,7 +81,8 @@ pub const TransactionCoordinator = struct {
 
     pub fn deinit(self: *Self) void {
         // Free all partition keys
-        for (self.partitions_in_txn.keys()) |key| {
+        var it = self.partitions_in_txn.keyIterator();
+        while (it.next()) |key| {
             self.allocator.free(key.topic);
         }
         self.partitions_in_txn.deinit();
@@ -101,7 +102,7 @@ pub const TransactionCoordinator = struct {
         const resp_size = try conn.sendRequest(10, 4, req);
 
         // Parse response
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         // Skip correlation ID
@@ -147,7 +148,8 @@ pub const TransactionCoordinator = struct {
         }
 
         // Clear partitions from previous transaction
-        for (self.partitions_in_txn.keys()) |key| {
+        var it = self.partitions_in_txn.keyIterator();
+        while (it.next()) |key| {
             self.allocator.free(key.topic);
         }
         self.partitions_in_txn.clearRetainingCapacity();
@@ -187,7 +189,7 @@ pub const TransactionCoordinator = struct {
         const resp_size = try conn.sendRequest(24, 0, req);
 
         // Parse response
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         // Skip correlation ID
@@ -274,7 +276,7 @@ pub const TransactionCoordinator = struct {
         const resp_size = try conn.sendRequest(26, 3, req);
 
         // Parse response
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         // Skip correlation ID
@@ -325,18 +327,27 @@ const TopicPartition = struct {
     }
 };
 
-const PartitionSet = std.ArrayHashMap(
+// 0.16 port: `std.ArrayHashMap` is absent from this stripped std. This is a
+// set (value type void) used only for membership checks (contains/put) and
+// full iteration to free keys; insertion order and indexed access are never
+// relied upon — the AddPartitionsToTxn request body is built independently of
+// set order — so an unordered `std.HashMap` is a faithful, behaviour-preserving
+// swap. Keys hold a `[]const u8` slice, so we keep the custom hash/eql context
+// (default auto-hashing would hash the slice by pointer). Note the unordered
+// HashMap context signature differs from ArrayHashMap: hash returns u64 and
+// eql takes no trailing index argument.
+const PartitionSet = std.HashMap(
     TopicPartition,
     void,
     struct {
-        pub fn hash(_: @This(), key: TopicPartition) u32 {
-            return @truncate(key.hash());
+        pub fn hash(_: @This(), key: TopicPartition) u64 {
+            return key.hash();
         }
-        pub fn eql(_: @This(), a: TopicPartition, b: TopicPartition, _: usize) bool {
+        pub fn eql(_: @This(), a: TopicPartition, b: TopicPartition) bool {
             return a.eql(b);
         }
     },
-    true,
+    std.hash_map.default_max_load_percentage,
 );
 
 // ============================================================================

@@ -225,8 +225,8 @@ pub const AddPartitionsToTxnTransaction = struct {
             if (self.topics) |arr| {
                 const len: u32 = @intCast(arr.len + 1);
                 total_size += if (is_flexible) types.computeSizeUnsignedVarInt(len) else 4;
-                for (arr) |item| {
-                    total_size += AddPartitionsToTxnTopic.computeSize(item);
+                for (arr) |*item| {
+                    total_size += try AddPartitionsToTxnTopic.computeSize(item, version);
                 }
             } else {
                 total_size += if (is_flexible) types.computeSizeUnsignedVarInt(1) else 4;
@@ -502,8 +502,8 @@ pub const AddPartitionsToTxnRequest = struct {
             if (self.v3_and_below_topics) |arr| {
                 const len: u32 = @intCast(arr.len + 1);
                 total_size += if (is_flexible) types.computeSizeUnsignedVarInt(len) else 4;
-                for (arr) |item| {
-                    total_size += AddPartitionsToTxnTopic.computeSize(item);
+                for (arr) |*item| {
+                    total_size += try AddPartitionsToTxnTopic.computeSize(item, version);
                 }
             } else {
                 total_size += if (is_flexible) types.computeSizeUnsignedVarInt(1) else 4;

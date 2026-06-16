@@ -37,7 +37,7 @@ pub fn decodeResponseFrame(
     }
 
     // Read 4-byte message size prefix
-    var stream = std.io.fixedBufferStream(data);
+    var stream = @import("ztime").fixedBufferStream(data);
     const reader = stream.reader();
 
     const message_size = try types.decodeInt32(reader);
@@ -139,7 +139,7 @@ test "readResponseFrame" {
     std.mem.writeInt(i32, wire[0..4], 4, .big);
     std.mem.writeInt(i32, wire[4..8], 7, .big);
 
-    var stream = std.io.fixedBufferStream(&wire);
+    var stream = @import("ztime").fixedBufferStream(&wire);
     var recv_buf: [256]u8 = undefined;
     const n = try readResponseFrame(stream.reader(), &recv_buf);
     try std.testing.expectEqual(@as(usize, 8), n);
@@ -182,7 +182,7 @@ test "readResponseFrame buffer too small" {
     var wire: [8]u8 = undefined;
     std.mem.writeInt(i32, wire[0..4], 100, .big); // Claims 100 bytes
 
-    var stream = std.io.fixedBufferStream(&wire);
+    var stream = @import("ztime").fixedBufferStream(&wire);
     var recv_buf: [8]u8 = undefined; // Only 8 bytes available
     const result = readResponseFrame(stream.reader(), &recv_buf);
     try std.testing.expectError(error.BufferExhausted, result);
@@ -192,7 +192,7 @@ test "readResponseFrame negative size" {
     var wire: [8]u8 = undefined;
     std.mem.writeInt(i32, wire[0..4], -5, .big); // Negative
 
-    var stream = std.io.fixedBufferStream(&wire);
+    var stream = @import("ztime").fixedBufferStream(&wire);
     var recv_buf: [256]u8 = undefined;
     const result = readResponseFrame(stream.reader(), &recv_buf);
     try std.testing.expectError(error.ProtocolError, result);
@@ -203,7 +203,7 @@ test "readResponseFrame too large" {
     // 200MB - over the 100MB limit
     std.mem.writeInt(i32, wire[0..4], 200 * 1024 * 1024, .big);
 
-    var stream = std.io.fixedBufferStream(&wire);
+    var stream = @import("ztime").fixedBufferStream(&wire);
     var recv_buf: [256]u8 = undefined;
     const result = readResponseFrame(stream.reader(), &recv_buf);
     try std.testing.expectError(error.ProtocolError, result);

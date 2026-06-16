@@ -84,35 +84,16 @@ pub const BrokerConnection = struct {
 
         self.state = .connecting;
 
-        // Resolve address
+        // 0.16 port: `std.net` (Address, tcpConnectToAddress) is absent from
+        // this stripped std, so resolve + connect via `std.c.getaddrinfo` and
+        // a raw blocking socket. Address resolution and connection are fused
+        // (getaddrinfo hands us connect-ready sockaddrs directly); we still
+        // apply the existing TCP_NODELAY + timeout setsockopt logic and keep
+        // the fd, matching the original connect() contract.
         std.debug.print("[CONN] Resolving {s}:{d}\n", .{ self.host, self.port });
-        const addr = try resolveAddress(self.host, self.port);
-
-        // Create socket
-        const sock = try posix.socket(
-            addr.any.family,
-            posix.SOCK.STREAM | posix.SOCK.CLOEXEC,
-            posix.IPPROTO.TCP,
-        );
-        std.debug.print("[CONN] Created socket, attempting connect...\n", .{});
-
-        // Set TCP_NODELAY for low latency
-        setTcpNoDelay(sock) catch {};
-
-        // Set send/recv timeouts
-        setSocketTimeout(sock, posix.SO.RCVTIMEO, self.request_timeout_ms) catch {};
-        setSocketTimeout(sock, posix.SO.SNDTIMEO, self.request_timeout_ms) catch {};
-
-        // Connect (blocking)
-        posix.connect(sock, &addr.any, addr.getOsSockLen()) catch |err| {
-            std.debug.print("[CONN] Connect failed: {any}\n", .{err});
-            posix.close(sock);
+        const sock = self.dialBlocking() catch |err| {
             self.state = .disconnected;
-            return switch (err) {
-                error.ConnectionRefused => error.ConnectionFailed,
-                error.ConnectionTimedOut => error.ConnectionTimeout,
-                else => error.ConnectionFailed,
-            };
+            return err;
         };
         std.debug.print("[CONN] Successfully connected!\n", .{});
 
@@ -120,10 +101,57 @@ pub const BrokerConnection = struct {
         self.state = .connected;
     }
 
+    /// Resolve `self.host`:`self.port` and open a blocking TCP socket, trying
+    /// each address getaddrinfo returns until one connects. Applies
+    /// TCP_NODELAY and SO_RCVTIMEO/SNDTIMEO to the chosen fd.
+    fn dialBlocking(self: *Self) !posix.socket_t {
+        // NUL-terminate host (getaddrinfo wants a C string).
+        var host_z: [256]u8 = undefined;
+        if (self.host.len >= host_z.len) return error.ConnectionFailed;
+        @memcpy(host_z[0..self.host.len], self.host);
+        host_z[self.host.len] = 0;
+
+        var port_buf: [8]u8 = undefined;
+        const port_str = std.fmt.bufPrint(&port_buf, "{d}", .{self.port}) catch return error.ConnectionFailed;
+        port_buf[port_str.len] = 0;
+
+        var hints: std.c.addrinfo = std.mem.zeroes(std.c.addrinfo);
+        hints.family = std.c.AF.UNSPEC;
+        hints.socktype = std.c.SOCK.STREAM;
+
+        const host_ptr: [*:0]const u8 = @ptrCast(&host_z);
+        const port_ptr: [*:0]const u8 = @ptrCast(&port_buf);
+        var res: ?*std.c.addrinfo = null;
+        const rc = std.c.getaddrinfo(host_ptr, port_ptr, &hints, &res);
+        if (@intFromEnum(rc) != 0) {
+            std.debug.print("[RESOLVE] getaddrinfo failed: {d}\n", .{@intFromEnum(rc)});
+            return error.DnsResolutionFailed;
+        }
+        const head = res orelse return error.DnsResolutionFailed;
+        defer std.c.freeaddrinfo(head);
+
+        var ai: ?*std.c.addrinfo = head;
+        while (ai) |a| : (ai = a.next) {
+            const addr = a.addr orelse continue;
+            const sock = std.c.socket(@intCast(a.family), @intCast(a.socktype), @intCast(a.protocol));
+            if (sock < 0) continue;
+
+            // Low latency + bounded blocking I/O.
+            setTcpNoDelay(sock) catch {};
+            setSocketTimeout(sock, posix.SO.RCVTIMEO, self.request_timeout_ms) catch {};
+            setSocketTimeout(sock, posix.SO.SNDTIMEO, self.request_timeout_ms) catch {};
+
+            if (std.c.connect(sock, addr, a.addrlen) == 0) return sock;
+            std.debug.print("[CONN] Connect attempt failed, trying next addr\n", .{});
+            _ = std.c.close(sock);
+        }
+        return error.ConnectionFailed;
+    }
+
     /// Close the connection and release the socket.
     pub fn close(self: *Self) void {
         if (self.socket != invalid_socket) {
-            posix.close(self.socket);
+            _ = std.c.close(self.socket);
             self.socket = invalid_socket;
         }
         self.state = .closed;
@@ -132,7 +160,7 @@ pub const BrokerConnection = struct {
     /// Disconnect without transitioning to .closed (allows reconnection).
     pub fn disconnect(self: *Self) void {
         if (self.socket != invalid_socket) {
-            posix.close(self.socket);
+            _ = std.c.close(self.socket);
             self.socket = invalid_socket;
         }
         self.state = .disconnected;
@@ -185,7 +213,7 @@ pub const BrokerConnection = struct {
 
         // Validate correlation ID
         const resp_header_version = request_mod.responseHeaderVersion(api_key, api_version);
-        var header_stream = std.io.fixedBufferStream(self.recv_buf[4..total]);
+        var header_stream = @import("ztime").fixedBufferStream(self.recv_buf[4..total]);
         const resp_header = ResponseHeader.decode(header_stream.reader(), resp_header_version, std.heap.page_allocator) catch {
             self.disconnect();
             return error.ProtocolError;
@@ -211,16 +239,25 @@ pub const BrokerConnection = struct {
     // Internal I/O helpers
     // ========================================================================
 
+    // 0.16 port: `std.posix.send`/`std.posix.recv` are absent here, so go
+    // through the libc syscalls directly (`std.c.send`/`std.c.recv`). These
+    // return `isize` with -1 + errno on failure (rather than a Zig error
+    // union), so we map errno to the same connection errors the original code
+    // produced.
     pub fn sendAll(self: *Self, data: []const u8) !void {
         var sent: usize = 0;
         while (sent < data.len) {
-            const n = posix.send(self.socket, data[sent..], 0) catch |err| {
+            const chunk = data[sent..];
+            const rc = std.c.send(self.socket, chunk.ptr, chunk.len, 0);
+            if (rc < 0) {
+                const e = std.c.errno(rc);
                 self.disconnect();
-                return switch (err) {
-                    error.ConnectionResetByPeer, error.BrokenPipe => error.ConnectionClosed,
+                return switch (e) {
+                    .CONNRESET, .PIPE => error.ConnectionClosed,
                     else => error.ConnectionFailed,
                 };
-            };
+            }
+            const n: usize = @intCast(rc);
             if (n == 0) {
                 self.disconnect();
                 return error.ConnectionClosed;
@@ -232,14 +269,20 @@ pub const BrokerConnection = struct {
     pub fn recvExact(self: *Self, buf: []u8) !void {
         var received: usize = 0;
         while (received < buf.len) {
-            const n = posix.recv(self.socket, buf[received..], 0) catch |err| {
+            const dst = buf[received..];
+            const rc = std.c.recv(self.socket, dst.ptr, dst.len, 0);
+            if (rc < 0) {
+                const e = std.c.errno(rc);
                 self.disconnect();
-                return switch (err) {
-                    error.ConnectionResetByPeer => error.ConnectionClosed,
-                    error.WouldBlock => error.OperationTimeout,
+                return switch (e) {
+                    .CONNRESET => error.ConnectionClosed,
+                    // EAGAIN == EWOULDBLOCK on this target; a blocking socket
+                    // returns it when SO_RCVTIMEO fires.
+                    .AGAIN => error.OperationTimeout,
                     else => error.ConnectionFailed,
                 };
-            };
+            }
+            const n: usize = @intCast(rc);
             if (n == 0) {
                 self.disconnect();
                 return error.ConnectionClosed;
@@ -252,19 +295,45 @@ pub const BrokerConnection = struct {
     // Socket setup helpers
     // ========================================================================
 
-    fn resolveAddress(host: []const u8, port: u16) !std.net.Address {
-        // Try parsing as IP first
-        return std.net.Address.parseIp4(host, port) catch {
-            std.debug.print("[RESOLVE] Not IPv4, trying IPv6...\n", .{});
-            return std.net.Address.parseIp6(host, port) catch {
-                std.debug.print("[RESOLVE] Not IPv6, trying DNS resolution for {s}...\n", .{host});
-                // DNS resolution
-                return std.net.Address.resolveIp(host, port) catch |err| {
-                    std.debug.print("[RESOLVE] DNS resolution failed: {any}\n", .{err});
-                    return error.DnsResolutionFailed;
-                };
-            };
-        };
+    /// Minimal resolved-address handle. `std.net.Address` is absent from this
+    /// stripped 0.16 std, so resolution returns just the bits the rest of the
+    /// SDK needs: the requested port (the live connect path in `dialBlocking`
+    /// uses getaddrinfo's sockaddrs directly and never materializes this).
+    pub const ResolvedAddress = struct {
+        port: u16,
+        family: i32,
+
+        pub fn getPort(self: ResolvedAddress) u16 {
+            return self.port;
+        }
+    };
+
+    /// Resolve `host` (IP literal or DNS name) for `port` using
+    /// `std.c.getaddrinfo`. Returns the requested port and the address family
+    /// of the first resolved record.
+    fn resolveAddress(host: []const u8, port: u16) !ResolvedAddress {
+        var host_z: [256]u8 = undefined;
+        if (host.len >= host_z.len) return error.DnsResolutionFailed;
+        @memcpy(host_z[0..host.len], host);
+        host_z[host.len] = 0;
+
+        var port_buf: [8]u8 = undefined;
+        const port_str = std.fmt.bufPrint(&port_buf, "{d}", .{port}) catch return error.DnsResolutionFailed;
+        port_buf[port_str.len] = 0;
+
+        var hints: std.c.addrinfo = std.mem.zeroes(std.c.addrinfo);
+        hints.family = std.c.AF.UNSPEC;
+        hints.socktype = std.c.SOCK.STREAM;
+
+        const host_ptr: [*:0]const u8 = @ptrCast(&host_z);
+        const port_ptr: [*:0]const u8 = @ptrCast(&port_buf);
+        var res: ?*std.c.addrinfo = null;
+        const rc = std.c.getaddrinfo(host_ptr, port_ptr, &hints, &res);
+        if (@intFromEnum(rc) != 0) return error.DnsResolutionFailed;
+        const head = res orelse return error.DnsResolutionFailed;
+        defer std.c.freeaddrinfo(head);
+
+        return .{ .port = port, .family = head.family };
     }
 
     fn setTcpNoDelay(sock: posix.socket_t) !void {

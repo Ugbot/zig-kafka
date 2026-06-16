@@ -123,7 +123,7 @@ pub const KafkaClient = struct {
 
         // Parse response
         const resp_header_ver = @import("../wire/request.zig").responseHeaderVersion(3, version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
         const types = @import("kafka_generated").types;
 
@@ -203,7 +203,7 @@ pub const KafkaClient = struct {
             }
         }
 
-        self.metadata.last_refresh_ms = std.time.milliTimestamp();
+        self.metadata.last_refresh_ms = @import("ztime").milliTimestamp();
     }
 
     /// Create a KafkaProducer bound to this client's metadata and broker pool.

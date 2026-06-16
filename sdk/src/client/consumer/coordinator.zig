@@ -195,7 +195,7 @@ pub const GroupCoordinator = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(10, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader); // correlation_id
@@ -294,7 +294,7 @@ pub const GroupCoordinator = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(11, version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -373,7 +373,7 @@ pub const GroupCoordinator = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(14, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -417,7 +417,7 @@ pub const GroupCoordinator = struct {
     /// Heartbeat loop (runs in background thread).
     fn heartbeatLoop(self: *Self) void {
         while (self.heartbeat_running.load(.acquire)) {
-            const now_ms = std.time.milliTimestamp();
+            const now_ms = @import("ztime").milliTimestamp();
             const last_ms = self.last_heartbeat_ms.load(.acquire);
 
             if (now_ms - last_ms >= self.heartbeat_interval_ms) {
@@ -431,7 +431,7 @@ pub const GroupCoordinator = struct {
                 self.last_heartbeat_ms.store(now_ms, .release);
             }
 
-            std.Thread.sleep(100 * std.time.ns_per_ms); // Sleep 100ms
+            @import("ztime").sleepNs(100 * std.time.ns_per_ms); // Sleep 100ms
         }
     }
 
@@ -465,7 +465,7 @@ pub const GroupCoordinator = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(12, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -487,7 +487,7 @@ pub const GroupCoordinator = struct {
     /// Decode ConsumerProtocolSubscription from JoinGroup member metadata.
     /// Format: version (int16) + topics (array of strings) + user_data (bytes)
     pub fn decodeSubscriptionMetadata(metadata: []const u8, allocator: std.mem.Allocator) ![][]const u8 {
-        var stream = std.io.fixedBufferStream(metadata);
+        var stream = @import("ztime").fixedBufferStream(metadata);
         const reader = stream.reader();
 
         // Read version (int16) - currently only v0 supported
@@ -637,7 +637,7 @@ pub const GroupCoordinator = struct {
     /// Parse partition assignment from SyncGroup response and update subscription.
     /// Format: version (int16) + assigned_partitions (array) + user_data (bytes)
     pub fn applyPartitionAssignment(self: *Self, assignment: []const u8) !void {
-        var stream = std.io.fixedBufferStream(assignment);
+        var stream = @import("ztime").fixedBufferStream(assignment);
         const reader = stream.reader();
 
         // Read version (int16)

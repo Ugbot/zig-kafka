@@ -41,11 +41,11 @@ test "varint: unsigned encode/decode roundtrip" {
 
     for (test_values) |value| {
         var buf: [10]u8 = undefined;
-        var write_stream = std.io.fixedBufferStream(&buf);
+        var write_stream = @import("ztime").fixedBufferStream(&buf);
         try types.encodeUnsignedVarInt(write_stream.writer(), value);
 
         const written = write_stream.pos;
-        var read_stream = std.io.fixedBufferStream(buf[0..written]);
+        var read_stream = @import("ztime").fixedBufferStream(buf[0..written]);
         const decoded = try types.decodeUnsignedVarInt(read_stream.reader());
 
         try std.testing.expectEqual(value, decoded);
@@ -74,7 +74,7 @@ test "varint: unsigned encoding size" {
 
     for (cases) |case| {
         var buf: [10]u8 = undefined;
-        var stream = std.io.fixedBufferStream(&buf);
+        var stream = @import("ztime").fixedBufferStream(&buf);
         try types.encodeUnsignedVarInt(stream.writer(), case.value);
         try std.testing.expectEqual(case.expected_size, stream.pos);
     }
@@ -104,11 +104,11 @@ test "varint: signed zigzag encode/decode roundtrip" {
 
     for (test_values) |value| {
         var buf: [10]u8 = undefined;
-        var write_stream = std.io.fixedBufferStream(&buf);
+        var write_stream = @import("ztime").fixedBufferStream(&buf);
         try types.encodeVarInt(write_stream.writer(), value);
 
         const written = write_stream.pos;
-        var read_stream = std.io.fixedBufferStream(buf[0..written]);
+        var read_stream = @import("ztime").fixedBufferStream(buf[0..written]);
         const decoded = try types.decodeVarInt(read_stream.reader());
 
         try std.testing.expectEqual(value, decoded);
@@ -152,11 +152,11 @@ test "varint: i64 varlong encode/decode roundtrip" {
 
     for (test_values) |value| {
         var buf: [20]u8 = undefined;
-        var write_stream = std.io.fixedBufferStream(&buf);
+        var write_stream = @import("ztime").fixedBufferStream(&buf);
         try types.encodeVarLong(write_stream.writer(), value);
 
         const written = write_stream.pos;
-        var read_stream = std.io.fixedBufferStream(buf[0..written]);
+        var read_stream = @import("ztime").fixedBufferStream(buf[0..written]);
         const decoded = try types.decodeVarLong(read_stream.reader());
 
         try std.testing.expectEqual(value, decoded);
@@ -171,9 +171,9 @@ test "primitive: int16 encode/decode roundtrip" {
     const values = [_]i16{ 0, 1, -1, 127, -128, 32767, -32768 };
     for (values) |v| {
         var buf: [2]u8 = undefined;
-        var ws = std.io.fixedBufferStream(&buf);
+        var ws = @import("ztime").fixedBufferStream(&buf);
         try types.encodeInt16(ws.writer(), v);
-        var rs = std.io.fixedBufferStream(&buf);
+        var rs = @import("ztime").fixedBufferStream(&buf);
         try std.testing.expectEqual(v, try types.decodeInt16(rs.reader()));
     }
 }
@@ -182,9 +182,9 @@ test "primitive: int32 encode/decode roundtrip" {
     const values = [_]i32{ 0, 1, -1, 2147483647, -2147483648, 42, -99 };
     for (values) |v| {
         var buf: [4]u8 = undefined;
-        var ws = std.io.fixedBufferStream(&buf);
+        var ws = @import("ztime").fixedBufferStream(&buf);
         try types.encodeInt32(ws.writer(), v);
-        var rs = std.io.fixedBufferStream(&buf);
+        var rs = @import("ztime").fixedBufferStream(&buf);
         try std.testing.expectEqual(v, try types.decodeInt32(rs.reader()));
     }
 }
@@ -193,9 +193,9 @@ test "primitive: int64 encode/decode roundtrip" {
     const values = [_]i64{ 0, 1, -1, std.math.maxInt(i64), std.math.minInt(i64), 1609459200000 };
     for (values) |v| {
         var buf: [8]u8 = undefined;
-        var ws = std.io.fixedBufferStream(&buf);
+        var ws = @import("ztime").fixedBufferStream(&buf);
         try types.encodeInt64(ws.writer(), v);
-        var rs = std.io.fixedBufferStream(&buf);
+        var rs = @import("ztime").fixedBufferStream(&buf);
         try std.testing.expectEqual(v, try types.decodeInt64(rs.reader()));
     }
 }
@@ -203,14 +203,14 @@ test "primitive: int64 encode/decode roundtrip" {
 test "primitive: boolean encode/decode" {
     var buf: [1]u8 = undefined;
 
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeBoolean(ws.writer(), true);
-    var rs = std.io.fixedBufferStream(&buf);
+    var rs = @import("ztime").fixedBufferStream(&buf);
     try std.testing.expectEqual(true, try types.decodeBoolean(rs.reader()));
 
-    ws = std.io.fixedBufferStream(&buf);
+    ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeBoolean(ws.writer(), false);
-    rs = std.io.fixedBufferStream(&buf);
+    rs = @import("ztime").fixedBufferStream(&buf);
     try std.testing.expectEqual(false, try types.decodeBoolean(rs.reader()));
 }
 
@@ -218,9 +218,9 @@ test "primitive: float64 encode/decode" {
     const values = [_]f64{ 0.0, 1.0, -1.0, 3.14159, std.math.inf(f64) };
     for (values) |v| {
         var buf: [8]u8 = undefined;
-        var ws = std.io.fixedBufferStream(&buf);
+        var ws = @import("ztime").fixedBufferStream(&buf);
         try types.encodeFloat64(ws.writer(), v);
-        var rs = std.io.fixedBufferStream(&buf);
+        var rs = @import("ztime").fixedBufferStream(&buf);
         try std.testing.expectEqual(v, try types.decodeFloat64(rs.reader()));
     }
 }
@@ -228,9 +228,9 @@ test "primitive: float64 encode/decode" {
 test "primitive: uuid encode/decode" {
     const uuid = [16]u8{ 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10 };
     var buf: [16]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeUuid(ws.writer(), uuid);
-    var rs = std.io.fixedBufferStream(&buf);
+    var rs = @import("ztime").fixedBufferStream(&buf);
     const decoded = try types.decodeUuid(rs.reader());
     try std.testing.expectEqualSlices(u8, &uuid, &decoded);
 }
@@ -241,9 +241,9 @@ test "primitive: uuid encode/decode" {
 
 test "string: nullable encode/decode" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeString(ws.writer(), "hello");
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeString(rs.reader(), std.testing.allocator);
     defer if (decoded) |d| std.testing.allocator.free(d);
     try std.testing.expectEqualStrings("hello", decoded.?);
@@ -251,18 +251,18 @@ test "string: nullable encode/decode" {
 
 test "string: null string encode/decode" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeString(ws.writer(), null);
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeString(rs.reader(), std.testing.allocator);
     try std.testing.expectEqual(@as(?[]const u8, null), decoded);
 }
 
 test "string: empty string" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeString(ws.writer(), "");
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeString(rs.reader(), std.testing.allocator);
     try std.testing.expectEqualStrings("", decoded.?);
 }
@@ -270,9 +270,9 @@ test "string: empty string" {
 test "bytes: nullable encode/decode" {
     var buf: [256]u8 = undefined;
     const data = "binary\x00data";
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeBytes(ws.writer(), data);
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeBytes(rs.reader(), std.testing.allocator);
     defer if (decoded) |d| std.testing.allocator.free(d);
     try std.testing.expectEqualSlices(u8, data, decoded.?);
@@ -280,9 +280,9 @@ test "bytes: nullable encode/decode" {
 
 test "bytes: null bytes" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeBytes(ws.writer(), null);
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeBytes(rs.reader(), std.testing.allocator);
     try std.testing.expectEqual(@as(?[]const u8, null), decoded);
 }
@@ -293,9 +293,9 @@ test "bytes: null bytes" {
 
 test "compact string: encode/decode roundtrip" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeCompactString(ws.writer(), "compact-test");
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeCompactString(rs.reader(), std.testing.allocator);
     defer if (decoded) |d| std.testing.allocator.free(d);
     try std.testing.expectEqualStrings("compact-test", decoded.?);
@@ -303,9 +303,9 @@ test "compact string: encode/decode roundtrip" {
 
 test "compact string: null" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeCompactString(ws.writer(), null);
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try types.decodeCompactString(rs.reader(), std.testing.allocator);
     try std.testing.expectEqual(@as(?[]const u8, null), decoded);
 }
@@ -313,19 +313,19 @@ test "compact string: null" {
 test "compact array length: encode/decode" {
     // Non-null array with 5 elements
     var buf: [10]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     const items = [_]u8{ 1, 2, 3, 4, 5 };
     try types.encodeCompactArrayLen(ws.writer(), @as(?[]const u8, &items));
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded_len = try types.decodeCompactArrayLen(rs.reader());
     try std.testing.expectEqual(@as(usize, 5), decoded_len);
 }
 
 test "compact array length: null" {
     var buf: [10]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeCompactArrayLen(ws.writer(), @as(?[]const u8, null));
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded_len = try types.decodeCompactArrayLen(rs.reader());
     try std.testing.expectEqual(@as(usize, 0), decoded_len);
 }
@@ -639,9 +639,9 @@ test "request frame: Produce v9 flexible encoding" {
 
 test "array length: nullable null" {
     var buf: [10]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeArrayLen(ws.writer(), @as(?[]const u8, null));
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const len_i32 = try types.decodeInt32(rs.reader());
     try std.testing.expectEqual(@as(i32, -1), len_i32);
 }
@@ -649,18 +649,18 @@ test "array length: nullable null" {
 test "array length: non-null" {
     var buf: [10]u8 = undefined;
     const items = [_]u8{ 1, 2, 3 };
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeArrayLen(ws.writer(), @as(?[]const u8, &items));
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const len_i32 = try types.decodeInt32(rs.reader());
     try std.testing.expectEqual(@as(i32, 3), len_i32);
 }
 
 test "array length: non-nullable null encodes as 0" {
     var buf: [10]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeArrayLenNonNull(ws.writer(), @as(?[]const u8, null));
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const len_i32 = try types.decodeInt32(rs.reader());
     try std.testing.expectEqual(@as(i32, 0), len_i32);
 }
@@ -672,7 +672,7 @@ test "array length: non-nullable null encodes as 0" {
 test "tagged fields: empty tag buffer" {
     // In flexible versions, 0 tagged fields = single byte 0x00
     var buf: [10]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try types.encodeUnsignedVarInt(ws.writer(), 0); // 0 tagged fields
     try std.testing.expectEqual(@as(usize, 1), ws.pos);
     try std.testing.expectEqual(@as(u8, 0), buf[0]);
@@ -687,7 +687,7 @@ test "request header v2: client_id uses i16 length prefix, not varint" {
     // flexibleVersions: "none" in the spec, meaning it must always
     // use non-compact (i16 length prefix) encoding.
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
 
     const header = RequestHeader{
         .request_api_key = 18, // ApiVersions
@@ -719,7 +719,7 @@ test "request header v2: client_id uses i16 length prefix, not varint" {
 
 test "request header v2: null client_id uses i16 null marker" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
 
     const header = RequestHeader{
         .request_api_key = 18,
@@ -740,7 +740,7 @@ test "request header v2: null client_id uses i16 null marker" {
 
 test "request header v2: encode/decode roundtrip" {
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
 
     const original = RequestHeader{
         .request_api_key = 3,
@@ -751,7 +751,7 @@ test "request header v2: encode/decode roundtrip" {
 
     try original.encode(ws.writer(), 2);
 
-    var rs = std.io.fixedBufferStream(buf[0..ws.pos]);
+    var rs = @import("ztime").fixedBufferStream(buf[0..ws.pos]);
     const decoded = try RequestHeader.decode(rs.reader(), 2, std.testing.allocator);
     defer if (decoded.client_id) |cid| std.testing.allocator.free(cid);
 
@@ -772,7 +772,7 @@ test "request header v2: computeSize matches encode" {
     const computed = try header.computeSize(2);
 
     var buf: [256]u8 = undefined;
-    var ws = std.io.fixedBufferStream(&buf);
+    var ws = @import("ztime").fixedBufferStream(&buf);
     try header.encode(ws.writer(), 2);
 
     try std.testing.expectEqual(ws.pos, computed);

@@ -70,7 +70,7 @@ pub fn decompress(
             var decompressed = std.array_list.Managed(u8).init(allocator);
             errdefer decompressed.deinit();
 
-            var stream = std.io.fixedBufferStream(compressed_data);
+            var stream = @import("ztime").fixedBufferStream(compressed_data);
             var decompressor = std.compress.gzip.decompressor(stream.reader());
 
             try decompressor.reader().readAllArrayList(&decompressed, std.math.maxInt(usize));

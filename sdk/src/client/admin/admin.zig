@@ -84,7 +84,7 @@ pub const KafkaAdmin = struct {
         defer arena.deinit();
 
         const resp_header_ver = request_mod.responseHeaderVersion(19, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -129,7 +129,7 @@ pub const KafkaAdmin = struct {
         defer arena.deinit();
 
         const resp_header_ver = request_mod.responseHeaderVersion(20, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -184,7 +184,7 @@ pub const KafkaAdmin = struct {
         defer arena.deinit();
 
         const resp_header_ver = request_mod.responseHeaderVersion(16, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -252,7 +252,7 @@ pub const KafkaAdmin = struct {
         defer arena.deinit();
 
         const resp_header_ver = request_mod.responseHeaderVersion(42, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);

@@ -25,7 +25,8 @@ pub const SequenceManager = struct {
 
     pub fn deinit(self: *Self) void {
         // Free all keys
-        for (self.sequences.keys()) |key| {
+        var it = self.sequences.keyIterator();
+        while (it.next()) |key| {
             self.allocator.free(key.topic);
         }
         self.sequences.deinit();
@@ -72,7 +73,8 @@ pub const SequenceManager = struct {
 
     /// Reset all sequences (used when producer ID is reinitialized).
     pub fn resetAll(self: *Self) void {
-        for (self.sequences.values()) |*seq| {
+        var it = self.sequences.valueIterator();
+        while (it.next()) |seq| {
             seq.* = 0;
         }
     }
@@ -96,18 +98,26 @@ const PartitionKey = struct {
     }
 };
 
-const PartitionSequenceMap = std.ArrayHashMap(
+// 0.16 port: `std.ArrayHashMap` is absent from this stripped std. This map is
+// only used for key->value lookup plus full iteration to free keys / reset
+// counters (resetAll); insertion order and indexed access are never relied
+// upon, so an unordered `std.HashMap` is a faithful, behaviour-preserving
+// swap. Keys hold a `[]const u8` slice, so we keep the custom hash/eql context
+// (default auto-hashing would hash the slice by pointer). Note the unordered
+// HashMap context signature differs from ArrayHashMap: hash returns u64 and
+// eql takes no trailing index argument.
+const PartitionSequenceMap = std.HashMap(
     PartitionKey,
     i32,
     struct {
-        pub fn hash(_: @This(), key: PartitionKey) u32 {
-            return @truncate(key.hash());
+        pub fn hash(_: @This(), key: PartitionKey) u64 {
+            return key.hash();
         }
-        pub fn eql(_: @This(), a: PartitionKey, b: PartitionKey, _: usize) bool {
+        pub fn eql(_: @This(), a: PartitionKey, b: PartitionKey) bool {
             return a.eql(b);
         }
     },
-    true,
+    std.hash_map.default_max_load_percentage,
 );
 
 // ============================================================================

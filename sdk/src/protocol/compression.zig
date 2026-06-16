@@ -200,7 +200,7 @@ pub fn decompressSnappy(allocator: mem.Allocator, compressed: []const u8) ![]u8 
 // ============================================================================
 
 pub fn decompressGzip(allocator: mem.Allocator, compressed: []const u8) ![]u8 {
-    var stream = std.io.fixedBufferStream(compressed);
+    var stream = @import("ztime").fixedBufferStream(compressed);
     var decompressor = std.compress.gzip.decompressor(stream.reader());
 
     var output = std.array_list.Managed(u8).init(allocator);

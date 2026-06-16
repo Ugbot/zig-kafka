@@ -70,7 +70,7 @@ pub const ProducerIdManager = struct {
         const resp_size = try conn.sendRequest(22, 4, request);
 
         // Parse response (skip 4-byte size prefix)
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         // Skip correlation ID

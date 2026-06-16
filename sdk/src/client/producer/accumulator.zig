@@ -244,7 +244,7 @@ test "RecordAccumulator basic append" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const slot_idx = try acc.append("test-topic", 0, "key1", "value1", now);
     try std.testing.expect(slot_idx < RecordAccumulator.MAX_SLOTS);
     try std.testing.expectEqual(@as(u16, 1), acc.pendingCount());
@@ -254,7 +254,7 @@ test "RecordAccumulator same partition reuses slot" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx1 = try acc.append("topic", 0, "k1", "v1", now);
     const idx2 = try acc.append("topic", 0, "k2", "v2", now);
 
@@ -266,7 +266,7 @@ test "RecordAccumulator different partitions use different slots" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx1 = try acc.append("topic", 0, "k1", "v1", now);
     const idx2 = try acc.append("topic", 1, "k2", "v2", now);
 
@@ -279,10 +279,10 @@ test "RecordAccumulator markExpired" {
     acc.max_batch_bytes = 64_000;
     acc.linger_ms = 10;
 
-    const past: i64 = @intCast(std.time.milliTimestamp() - 100);
+    const past: i64 = @intCast(@import("ztime").milliTimestamp() - 100);
     _ = try acc.append("topic", 0, "k", "v", past);
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const ready = acc.markExpired(now);
     try std.testing.expectEqual(@as(u16, 1), ready);
     try std.testing.expectEqual(BatchSlot.State.ready, acc.slots[0].state);
@@ -292,7 +292,7 @@ test "RecordAccumulator complete slot" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("topic", 0, "k", "v", now);
     try std.testing.expectEqual(@as(u16, 1), acc.pendingCount());
 
@@ -304,7 +304,7 @@ test "RecordAccumulator slot exhaustion" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
 
     // Fill all slots with different partitions
     var i: i32 = 0;
@@ -322,7 +322,7 @@ test "RecordAccumulator drain and complete cycle" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("topic", 0, "k", "value-data", now);
 
     // Not ready yet
@@ -349,7 +349,7 @@ test "RecordAccumulator multiple records same batch" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     _ = try acc.append("topic", 0, "k1", "v1", now);
     _ = try acc.append("topic", 0, "k2", "v2", now);
     _ = try acc.append("topic", 0, "k3", "v3", now);
@@ -363,7 +363,7 @@ test "RecordAccumulator batch full triggers new slot" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 100; // Very small batch to force overflow
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
 
     // First record fits
     const idx1 = try acc.append("topic", 0, "k1", "value-that-is-large-enough", now);
@@ -381,7 +381,7 @@ test "RecordAccumulator null key" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("topic", 0, null, "value-only", now);
     try std.testing.expect(idx < RecordAccumulator.MAX_SLOTS);
     try std.testing.expectEqual(@as(u32, 1), acc.slots[idx].record_count);
@@ -391,7 +391,7 @@ test "RecordAccumulator markExpired does not touch empty slots" {
     var acc = RecordAccumulator{};
     acc.linger_ms = 0; // Expire immediately
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const ready = acc.markExpired(now);
     try std.testing.expectEqual(@as(u16, 0), ready);
 }
@@ -413,7 +413,7 @@ test "RecordAccumulator topic name stored correctly" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("my-test-topic", 0, "k", "v", now);
     try std.testing.expectEqualStrings("my-test-topic", acc.slots[idx].topicName());
 }
@@ -422,7 +422,7 @@ test "RecordAccumulator different topics different slots" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx1 = try acc.append("topic-a", 0, "k", "v", now);
     const idx2 = try acc.append("topic-b", 0, "k", "v", now);
 
@@ -434,7 +434,7 @@ test "RecordAccumulator drain produces valid RecordBatch" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("topic", 0, "key", "value", now);
     _ = try acc.append("topic", 0, "key2", "value2", now);
 
@@ -459,7 +459,7 @@ test "RecordAccumulator slot reuse after complete" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
 
     // Fill a slot
     const idx1 = try acc.append("topic", 0, "k", "v", now);
@@ -476,7 +476,7 @@ test "RecordAccumulator state transitions" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append("topic", 0, "k", "v", now);
 
     // Verify state: active
@@ -505,7 +505,7 @@ test "RecordAccumulator markExpired counts ready slots" {
     _ = try acc.append("t2", 0, "k", "v", past);
     _ = try acc.append("t3", 0, "k", "v", past);
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const ready = acc.markExpired(now);
     try std.testing.expectEqual(@as(u16, 3), ready);
 }
@@ -518,7 +518,7 @@ test "RecordAccumulator long topic name truncation" {
     var long_name: [249]u8 = undefined;
     @memset(&long_name, 'x');
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     const idx = try acc.append(&long_name, 0, "k", "v", now);
     try std.testing.expectEqual(@as(u16, 249), acc.slots[idx].topic_len);
     try std.testing.expectEqualSlices(u8, &long_name, acc.slots[idx].topicName());
@@ -528,7 +528,7 @@ test "RecordAccumulator pendingCount reflects all non-empty states" {
     var acc = RecordAccumulator{};
     acc.max_batch_bytes = 64_000;
 
-    const now: i64 = @intCast(std.time.milliTimestamp());
+    const now: i64 = @intCast(@import("ztime").milliTimestamp());
     _ = try acc.append("t1", 0, "k", "v", now);
     _ = try acc.append("t2", 0, "k", "v", now);
 

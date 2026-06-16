@@ -168,11 +168,45 @@ pub fn decodeBytes(reader: anytype, allocator: std.mem.Allocator) !?[]const u8 {
 }
 
 /// Array - length-prefixed array of elements — nullable: null encodes as -1
+/// Call an encode function, handling both 2-arg (writer, value) primitive
+/// encoders and 3-arg (self, writer, version) generated-struct `encode`
+/// methods. Mirrors `callDecodeFn`. Generated struct methods take `*const T`
+/// as their first parameter, so pass a pointer to the element; primitive
+/// encoders take the element by value. Version defaults to 0 (the same default
+/// `callDecodeFn` uses); call sites that need a specific version emit an
+/// explicit element loop instead of going through these helpers.
+fn callEncodeFn(comptime T: type, encodeFn: anytype, writer: anytype, item: *const T) !void {
+    const FnInfo = @typeInfo(@TypeOf(encodeFn)).@"fn";
+    if (FnInfo.params.len == 3) {
+        // 3-arg generated method: encode(self: *const T, writer, version)
+        try encodeFn(item, writer, @as(i16, 0));
+    } else {
+        // 2-arg primitive encoder: encode(writer, value)
+        try encodeFn(writer, item.*);
+    }
+}
+
+/// Call a size function, handling both 1-arg (value) primitive sizers and
+/// 2-arg (self, version) generated-struct `computeSize` methods. Mirrors
+/// `callDecodeFn`/`callEncodeFn`.
+fn callComputeFn(comptime T: type, computeFn: anytype, item: *const T) !usize {
+    const FnInfo = @typeInfo(@TypeOf(computeFn)).@"fn";
+    if (FnInfo.params.len == 2) {
+        // 2-arg generated method: computeSize(self: *const T, version)
+        return try computeFn(item, @as(i16, 0));
+    } else {
+        // 1-arg primitive sizer: computeSize(value)
+        const result = computeFn(item.*);
+        // Primitive sizers return usize directly; generated ones return !usize.
+        return if (@typeInfo(@TypeOf(result)) == .error_union) try result else result;
+    }
+}
+
 pub fn encodeArray(comptime T: type, writer: anytype, value: ?[]const T, encodeFn: anytype) !void {
     if (value) |array| {
         try encodeInt32(writer, @intCast(array.len));
-        for (array) |item| {
-            try encodeFn(writer, item);
+        for (array) |*item| {
+            try callEncodeFn(T, encodeFn, writer, item);
         }
     } else {
         try encodeInt32(writer, -1); // Null array
@@ -183,8 +217,8 @@ pub fn encodeArray(comptime T: type, writer: anytype, value: ?[]const T, encodeF
 pub fn encodeArrayNonNull(comptime T: type, writer: anytype, value: ?[]const T, encodeFn: anytype) !void {
     if (value) |array| {
         try encodeInt32(writer, @intCast(array.len));
-        for (array) |item| {
-            try encodeFn(writer, item);
+        for (array) |*item| {
+            try callEncodeFn(T, encodeFn, writer, item);
         }
     } else {
         try encodeInt32(writer, 0); // Empty array
@@ -447,8 +481,8 @@ pub fn decodeNonNullableCompactBytes(reader: anytype, allocator: std.mem.Allocat
 pub fn encodeCompactArray(comptime T: type, writer: anytype, value: ?[]const T, encodeFn: anytype) !void {
     if (value) |array| {
         try encodeUnsignedVarInt(writer, @intCast(array.len + 1));
-        for (array) |item| {
-            try encodeFn(writer, item);
+        for (array) |*item| {
+            try callEncodeFn(T, encodeFn, writer, item);
         }
     } else {
         try encodeUnsignedVarInt(writer, 0); // Null array
@@ -459,8 +493,8 @@ pub fn encodeCompactArray(comptime T: type, writer: anytype, value: ?[]const T, 
 pub fn encodeCompactArrayNonNull(comptime T: type, writer: anytype, value: ?[]const T, encodeFn: anytype) !void {
     if (value) |array| {
         try encodeUnsignedVarInt(writer, @intCast(array.len + 1));
-        for (array) |item| {
-            try encodeFn(writer, item);
+        for (array) |*item| {
+            try callEncodeFn(T, encodeFn, writer, item);
         }
     } else {
         try encodeUnsignedVarInt(writer, 1); // Empty array (0 elements)
@@ -634,8 +668,8 @@ pub fn computeSizeCompactBytes(value: ?[]const u8) usize {
 pub fn computeSizeArray(comptime T: type, value: ?[]const T, computeFn: anytype) !usize {
     if (value) |array| {
         var size: usize = 4; // int32 length
-        for (array) |item| {
-            size += try computeFn(item);
+        for (array) |*item| {
+            size += try callComputeFn(T, computeFn, item);
         }
         return size;
     }
@@ -647,8 +681,8 @@ pub fn computeSizeCompactArray(comptime T: type, value: ?[]const T, computeFn: a
     if (value) |array| {
         const len: u32 = @intCast(array.len + 1);
         var size: usize = computeSizeUnsignedVarInt(len);
-        for (array) |item| {
-            size += try computeFn(item);
+        for (array) |*item| {
+            size += try callComputeFn(T, computeFn, item);
         }
         return size;
     }
@@ -771,7 +805,7 @@ test "VarInt encoding/decoding" {
         try testing.expectEqualSlices(u8, tc.encoded, buffer.items);
         
         // Decode
-        var stream = std.io.fixedBufferStream(tc.encoded);
+        var stream = @import("ztime").fixedBufferStream(tc.encoded);
         const decoded = try decodeVarInt(stream.reader());
         try testing.expectEqual(tc.value, decoded);
     }
@@ -788,7 +822,7 @@ test "CompactString encoding/decoding" {
         try encodeCompactString(buffer.writer(), null);
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buffer.items);
         
-        var stream = std.io.fixedBufferStream(buffer.items);
+        var stream = @import("ztime").fixedBufferStream(buffer.items);
         const decoded = try decodeCompactString(stream.reader(), allocator);
         try testing.expect(decoded == null);
     }
@@ -800,7 +834,7 @@ test "CompactString encoding/decoding" {
         try encodeCompactString(buffer.writer(), "");
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buffer.items);
         
-        var stream = std.io.fixedBufferStream(buffer.items);
+        var stream = @import("ztime").fixedBufferStream(buffer.items);
         const decoded = try decodeCompactString(stream.reader(), allocator);
         defer if (decoded) |s| allocator.free(s);
         try testing.expectEqualStrings("", decoded.?);
@@ -813,7 +847,7 @@ test "CompactString encoding/decoding" {
         try encodeCompactString(buffer.writer(), "hello");
         try testing.expectEqualSlices(u8, &[_]u8{0x06} ++ "hello", buffer.items);
         
-        var stream = std.io.fixedBufferStream(buffer.items);
+        var stream = @import("ztime").fixedBufferStream(buffer.items);
         const decoded = try decodeCompactString(stream.reader(), allocator);
         defer if (decoded) |s| allocator.free(s);
         try testing.expectEqualStrings("hello", decoded.?);
@@ -866,14 +900,14 @@ test "Boolean encoding/decoding" {
         try testing.expectEqual(@as(usize, 1), buf.items.len);
         try testing.expectEqual(computeSizeBoolean(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeBoolean(stream.reader());
         try testing.expectEqual(val, decoded);
     }
     // Non-zero byte should decode as true
     {
         const bytes = [_]u8{0x42};
-        var stream = std.io.fixedBufferStream(&bytes);
+        var stream = @import("ztime").fixedBufferStream(&bytes);
         const decoded = try decodeBoolean(stream.reader());
         try testing.expect(decoded == true);
     }
@@ -889,7 +923,7 @@ test "Int8 encoding/decoding" {
         try testing.expectEqual(@as(usize, 1), buf.items.len);
         try testing.expectEqual(computeSizeInt8(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeInt8(stream.reader()));
     }
 }
@@ -904,7 +938,7 @@ test "Int16 encoding/decoding big-endian" {
         try testing.expectEqual(@as(usize, 2), buf.items.len);
         try testing.expectEqual(computeSizeInt16(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeInt16(stream.reader()));
     }
     // Verify big-endian byte order: 0x0100 = 256
@@ -926,7 +960,7 @@ test "Int32 encoding/decoding big-endian" {
         try testing.expectEqual(@as(usize, 4), buf.items.len);
         try testing.expectEqual(computeSizeInt32(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeInt32(stream.reader()));
     }
     // Verify big-endian: 0x00010000 = 65536
@@ -948,7 +982,7 @@ test "Int64 encoding/decoding big-endian" {
         try testing.expectEqual(@as(usize, 8), buf.items.len);
         try testing.expectEqual(computeSizeInt64(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeInt64(stream.reader()));
     }
 }
@@ -963,7 +997,7 @@ test "Uint16 encoding/decoding" {
         try testing.expectEqual(@as(usize, 2), buf.items.len);
         try testing.expectEqual(computeSizeUint16(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeUint16(stream.reader()));
     }
 }
@@ -978,7 +1012,7 @@ test "Uint32 encoding/decoding" {
         try testing.expectEqual(@as(usize, 4), buf.items.len);
         try testing.expectEqual(computeSizeUint32(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeUint32(stream.reader()));
     }
 }
@@ -993,7 +1027,7 @@ test "Float64 encoding/decoding" {
         try testing.expectEqual(@as(usize, 8), buf.items.len);
         try testing.expectEqual(computeSizeFloat64(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeFloat64(stream.reader()));
     }
 }
@@ -1009,7 +1043,7 @@ test "UUID encoding/decoding" {
         try testing.expectEqual(@as(usize, 16), buf.items.len);
         try testing.expectEqual(computeSizeUuid(zero_uuid), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqualSlices(u8, &zero_uuid, &try decodeUuid(stream.reader()));
     }
     // Non-zero UUID
@@ -1019,7 +1053,7 @@ test "UUID encoding/decoding" {
         defer buf.deinit();
         try encodeUuid(buf.writer(), uuid);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqualSlices(u8, &uuid, &try decodeUuid(stream.reader()));
     }
 }
@@ -1049,7 +1083,7 @@ test "VarInt extended zigzag table" {
         defer buf.deinit();
         try encodeVarInt(buf.writer(), val);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeVarInt(stream.reader()));
 
         // computeSize matches actual
@@ -1077,7 +1111,7 @@ test "UnsignedVarInt encoding/decoding" {
         try testing.expectEqualSlices(u8, tc.encoded, buf.items);
         try testing.expectEqual(computeSizeUnsignedVarInt(tc.value), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(tc.encoded);
+        var stream = @import("ztime").fixedBufferStream(tc.encoded);
         try testing.expectEqual(tc.value, try decodeUnsignedVarInt(stream.reader()));
     }
 }
@@ -1094,7 +1128,7 @@ test "VarLong encoding/decoding" {
         // computeSize matches
         try testing.expectEqual(computeSizeVarLong(val), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         try testing.expectEqual(val, try decodeVarLong(stream.reader()));
     }
 
@@ -1117,7 +1151,7 @@ test "String encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF }, buf.items);
         try testing.expectEqual(computeSizeString(null), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeString(stream.reader(), allocator);
         try testing.expect(decoded == null);
     }
@@ -1129,7 +1163,7 @@ test "String encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00 }, buf.items);
         try testing.expectEqual(computeSizeString(""), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeString(stream.reader(), allocator);
         try testing.expect(decoded != null);
         try testing.expectEqualStrings("", decoded.?);
@@ -1142,7 +1176,7 @@ test "String encoding/decoding - null vs empty distinction" {
         try testing.expectEqual(@as(usize, 6), buf.items.len); // 2 + 4
         try testing.expectEqual(computeSizeString("test"), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeString(stream.reader(), allocator);
         defer if (decoded) |s| allocator.free(s);
         try testing.expectEqualStrings("test", decoded.?);
@@ -1161,7 +1195,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{ 0xFF, 0xFF, 0xFF, 0xFF }, buf.items);
         try testing.expectEqual(computeSizeBytes(null), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeBytes(stream.reader(), allocator);
         try testing.expect(decoded == null);
     }
@@ -1173,7 +1207,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{ 0x00, 0x00, 0x00, 0x00 }, buf.items);
         try testing.expectEqual(computeSizeBytes(&[_]u8{}), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeBytes(stream.reader(), allocator);
         try testing.expect(decoded != null);
         try testing.expectEqual(@as(usize, 0), decoded.?.len);
@@ -1187,7 +1221,7 @@ test "Bytes encoding/decoding - null vs empty distinction" {
         try testing.expectEqual(@as(usize, 8), buf.items.len); // 4 + 4
         try testing.expectEqual(computeSizeBytes(data), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeBytes(stream.reader(), allocator);
         defer if (decoded) |d| allocator.free(d);
         try testing.expectEqualSlices(u8, data, decoded.?);
@@ -1206,7 +1240,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
         try testing.expectEqual(computeSizeCompactBytes(null), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeCompactBytes(stream.reader(), allocator);
         try testing.expect(decoded == null);
     }
@@ -1218,7 +1252,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
         try testing.expectEqualSlices(u8, &[_]u8{0x01}, buf.items);
         try testing.expectEqual(computeSizeCompactBytes(&[_]u8{}), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeCompactBytes(stream.reader(), allocator);
         try testing.expect(decoded != null);
         try testing.expectEqual(@as(usize, 0), decoded.?.len);
@@ -1231,7 +1265,7 @@ test "CompactBytes encoding/decoding - null vs empty distinction" {
         try encodeCompactBytes(buf.writer(), data);
         try testing.expectEqual(computeSizeCompactBytes(data), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeCompactBytes(stream.reader(), allocator);
         defer if (decoded) |d| allocator.free(d);
         try testing.expectEqualSlices(u8, data, decoded.?);
@@ -1254,7 +1288,7 @@ test "CompactString with multi-byte varint length" {
     // Length is 201 (200 + 1) which needs 2 varint bytes
     try testing.expectEqual(@as(usize, 2 + 200), buf.items.len);
 
-    var stream = std.io.fixedBufferStream(buf.items);
+    var stream = @import("ztime").fixedBufferStream(buf.items);
     const decoded = try decodeCompactString(stream.reader(), allocator);
     defer if (decoded) |s| allocator.free(s);
     try testing.expectEqual(@as(usize, 200), decoded.?.len);
@@ -1292,7 +1326,7 @@ test "Array encoding/decoding - null, empty, populated" {
         try encodeInt32(writer, 20);
         try encodeInt32(writer, 30);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodePrimitiveArray(i32, stream.reader(), allocator, decodeInt32);
         defer if (decoded) |d| allocator.free(d);
         try testing.expect(decoded != null);
@@ -1334,7 +1368,7 @@ test "CompactArray encoding/decoding - null, empty, populated" {
         try encodeInt32(writer, 200);
         try encodeInt32(writer, 300);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeCompactPrimitiveArray(i32, stream.reader(), allocator, decodeInt32);
         defer if (decoded) |d| allocator.free(d);
         try testing.expect(decoded != null);
@@ -1357,7 +1391,7 @@ test "TaggedFields encoding/decoding" {
         try testing.expectEqualSlices(u8, &[_]u8{0x00}, buf.items);
         try testing.expectEqual(computeSizeTaggedFields(&[_]TaggedField{}), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeTaggedFields(stream.reader(), allocator);
         try testing.expectEqual(@as(usize, 0), decoded.len);
     }
@@ -1370,7 +1404,7 @@ test "TaggedFields encoding/decoding" {
         try encodeTaggedFields(buf.writer(), &fields);
         try testing.expectEqual(computeSizeTaggedFields(&fields), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeTaggedFields(stream.reader(), allocator);
         defer {
             for (decoded) |f| allocator.free(@constCast(f.data));
@@ -1393,7 +1427,7 @@ test "TaggedFields encoding/decoding" {
         try encodeTaggedFields(buf.writer(), &fields);
         try testing.expectEqual(computeSizeTaggedFields(&fields), buf.items.len);
 
-        var stream = std.io.fixedBufferStream(buf.items);
+        var stream = @import("ztime").fixedBufferStream(buf.items);
         const decoded = try decodeTaggedFields(stream.reader(), allocator);
         defer {
             for (decoded) |f| allocator.free(@constCast(f.data));
@@ -1476,7 +1510,7 @@ test "UnsignedVarInt overflow detection" {
 
     // 6 bytes with continuation bits — should fail (max 5 bytes for u32)
     const overflow_bytes = [_]u8{ 0x80, 0x80, 0x80, 0x80, 0x80, 0x01 };
-    var stream = std.io.fixedBufferStream(&overflow_bytes);
+    var stream = @import("ztime").fixedBufferStream(&overflow_bytes);
     const result = decodeUnsignedVarInt(stream.reader());
     try testing.expectError(Error.InvalidVarInt, result);
 }

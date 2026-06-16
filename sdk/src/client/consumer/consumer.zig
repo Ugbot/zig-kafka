@@ -192,7 +192,7 @@ pub const KafkaConsumer = struct {
         if (!self.running.load(.acquire)) return error.ConsumerNotStarted;
         if (self.closed) return error.ConsumerClosed;
 
-        const start_ms = std.time.milliTimestamp();
+        const start_ms = @import("ztime").milliTimestamp();
 
         // 1. Check for rebalance events (group consumer only)
         if (self.coordinator) |*coord| {
@@ -215,7 +215,7 @@ pub const KafkaConsumer = struct {
         }
 
         // 2. Check if auto-commit needed
-        const now_ms = std.time.milliTimestamp();
+        const now_ms = @import("ztime").milliTimestamp();
         if (self.config.enable_auto_commit) {
             try self.offset_manager.maybeAutoCommit(now_ms);
         }

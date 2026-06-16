@@ -40,7 +40,7 @@ pub fn encodeRequest(
     }
 
     // Write to buffer using a fixed buffer stream
-    var stream = std.io.fixedBufferStream(buffer);
+    var stream = @import("ztime").fixedBufferStream(buffer);
     const writer = stream.writer();
 
     // 4-byte message size prefix (big-endian)

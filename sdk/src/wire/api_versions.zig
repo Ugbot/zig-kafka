@@ -40,7 +40,7 @@ pub fn negotiateApiVersions(conn: *BrokerConnection, allocator: std.mem.Allocato
         return error.BufferExhausted;
     }
 
-    var stream = std.io.fixedBufferStream(conn.send_buf);
+    var stream = @import("ztime").fixedBufferStream(conn.send_buf);
     const writer = stream.writer();
 
     try types.encodeInt32(writer, @intCast(message_size));
@@ -65,7 +65,7 @@ pub fn negotiateApiVersions(conn: *BrokerConnection, allocator: std.mem.Allocato
     try conn.recvExact(conn.recv_buf[4 .. 4 + resp_size]);
 
     // Parse response header (ApiVersions always uses response header v0)
-    var resp_stream = std.io.fixedBufferStream(conn.recv_buf[4 .. 4 + resp_size]);
+    var resp_stream = @import("ztime").fixedBufferStream(conn.recv_buf[4 .. 4 + resp_size]);
     const resp_reader = resp_stream.reader();
 
     const correlation_id = try types.decodeInt32(resp_reader);

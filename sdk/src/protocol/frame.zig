@@ -60,7 +60,7 @@ pub const Frame = struct {
 
     /// Decode complete request from wire bytes (including 4-byte size prefix)
     pub fn requestFromBytes(data: []const u8, allocator: std.mem.Allocator) !Frame {
-        var stream = std.io.fixedBufferStream(data);
+        var stream = @import("ztime").fixedBufferStream(data);
         const reader = stream.reader();
 
         const size = try types.decodeInt32(reader);

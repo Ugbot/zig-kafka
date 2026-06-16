@@ -514,7 +514,7 @@ pub fn deserializeKafkaMessage(allocator: mem.Allocator, data: []const u8) !Tick
         .key = key,
         .value = value,
         .headers = &[_]TickStreamMessage.Header{},
-        .timestamp = @intCast(std.time.milliTimestamp()),
+        .timestamp = @intCast(@import("ztime").milliTimestamp()),
         .offset = 0, // Will be set by caller
         .partition = 0, // Will be set by caller
     };
@@ -640,7 +640,7 @@ pub fn buildRecordBatchV2(
         const meta = metadata_slice[i];
 
         // Write record length as varint
-        var stream = std.io.fixedBufferStream(buffer[pos..]);
+        var stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), @intCast(meta.record_size));
         pos += varIntSize(@intCast(meta.record_size));
 
@@ -649,17 +649,17 @@ pub fn buildRecordBatchV2(
         pos += 1;
 
         // Write timestamp delta
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarLong(stream.writer(), meta.timestamp_delta);
         pos += varLongSize(meta.timestamp_delta);
 
         // Write offset delta
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), meta.offset_delta);
         pos += varIntSize(meta.offset_delta);
 
         // Write key length
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), meta.key_len);
         pos += varIntSize(meta.key_len);
 
@@ -670,7 +670,7 @@ pub fn buildRecordBatchV2(
         }
 
         // Write value length
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), @intCast(msg.value.len));
         pos += varIntSize(@intCast(msg.value.len));
 
@@ -679,7 +679,7 @@ pub fn buildRecordBatchV2(
         pos += msg.value.len;
 
         // Write headers count (0)
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), 0);
         pos += varIntSize(0);
     }
@@ -816,7 +816,7 @@ pub fn buildRecordBatchV2IntoBuffer(
         const meta = metadata_slice[i];
 
         // Write record length as varint
-        var stream = std.io.fixedBufferStream(buffer[pos..]);
+        var stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), @intCast(meta.record_size));
         pos += varIntSize(@intCast(meta.record_size));
 
@@ -825,17 +825,17 @@ pub fn buildRecordBatchV2IntoBuffer(
         pos += 1;
 
         // Write timestamp delta
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarLong(stream.writer(), meta.timestamp_delta);
         pos += varLongSize(meta.timestamp_delta);
 
         // Write offset delta
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), meta.offset_delta);
         pos += varIntSize(meta.offset_delta);
 
         // Write key length
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), meta.key_len);
         pos += varIntSize(meta.key_len);
 
@@ -846,7 +846,7 @@ pub fn buildRecordBatchV2IntoBuffer(
         }
 
         // Write value length
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), @intCast(msg.value.len));
         pos += varIntSize(@intCast(msg.value.len));
 
@@ -855,7 +855,7 @@ pub fn buildRecordBatchV2IntoBuffer(
         pos += msg.value.len;
 
         // Write headers count (0)
-        stream = std.io.fixedBufferStream(buffer[pos..]);
+        stream = @import("ztime").fixedBufferStream(buffer[pos..]);
         try writeVarInt(stream.writer(), 0);
         pos += varIntSize(0);
     }

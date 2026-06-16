@@ -100,7 +100,7 @@ pub const Sender = struct {
 
     /// Run one iteration of the send loop (exposed for testing).
     pub fn runOnce(self: *Self, allocator: std.mem.Allocator) void {
-        const now: i64 = @intCast(std.time.milliTimestamp());
+        const now: i64 = @intCast(@import("ztime").milliTimestamp());
         const expired_count = self.accumulator.markExpired(now);
 
         if (expired_count > 0) {
@@ -154,7 +154,7 @@ pub const Sender = struct {
                 std.debug.print("[SENDER] Still running, iteration {d}\n", .{iterations});
             }
             self.runOnce(std.heap.page_allocator);
-            std.Thread.sleep(1_000_000); // 1ms sleep between iterations
+            @import("ztime").sleepNs(1_000_000); // 1ms sleep between iterations
         }
         std.debug.print("[SENDER] Background thread stopped after {d} iterations\n", .{iterations});
     }
@@ -162,7 +162,7 @@ pub const Sender = struct {
     fn sendBatch(self: *Self, slot_idx: u16, slot: *BatchSlot, allocator: std.mem.Allocator) void {
         const topic_name = slot.topicName();
         const partition = slot.partition;
-        const start_ms = std.time.milliTimestamp();
+        const start_ms = @import("ztime").milliTimestamp();
 
         // Assign sequence number if idempotence enabled
         if (self.sequence_manager) |seq_mgr| {
@@ -241,7 +241,7 @@ pub const Sender = struct {
         std.debug.print("[SENDER] ProduceRequest sent, got response size={d}\n", .{resp_size});
 
         // Record latency before parsing
-        const latency_ms: u64 = @intCast(std.time.milliTimestamp() - start_ms);
+        const latency_ms: u64 = @intCast(@import("ztime").milliTimestamp() - start_ms);
 
         // Parse ProduceResponse and record metrics
         const success = self.parseProduceResponse(
@@ -281,7 +281,7 @@ pub const Sender = struct {
 
         // Skip 4-byte size prefix + response header
         const resp_header_ver = request_mod.responseHeaderVersion(0, self.produce_version);
-        var stream = std.io.fixedBufferStream(data[4..]);
+        var stream = @import("ztime").fixedBufferStream(data[4..]);
         const reader = stream.reader();
 
         // Skip response header

@@ -183,7 +183,7 @@ pub const KafkaProducer = struct {
             }
         }
 
-        const now: i64 = @intCast(std.time.milliTimestamp());
+        const now: i64 = @intCast(@import("ztime").milliTimestamp());
         _ = try self.accumulator.append(topic, partition, key, value, now);
 
         // Record metrics
@@ -211,7 +211,7 @@ pub const KafkaProducer = struct {
             }
         }
 
-        const now: i64 = @intCast(std.time.milliTimestamp());
+        const now: i64 = @intCast(@import("ztime").milliTimestamp());
         _ = try self.accumulator.append(topic, partition, key, value, now);
 
         // Record metrics
@@ -223,19 +223,19 @@ pub const KafkaProducer = struct {
     pub fn flush(self: *Self, timeout_ms: u32) !void {
         if (self.closed) return error.ClientClosed;
 
-        const deadline = std.time.milliTimestamp() + @as(i64, timeout_ms);
+        const deadline = @import("ztime").milliTimestamp() + @as(i64, timeout_ms);
         const initial_pending = self.accumulator.pendingCount();
         std.debug.print("[PRODUCER] Flushing {d} pending batches, timeout={d}ms\n", .{ initial_pending, timeout_ms });
 
         while (self.accumulator.pendingCount() > 0) {
-            if (std.time.milliTimestamp() >= deadline) {
+            if (@import("ztime").milliTimestamp() >= deadline) {
                 return error.FlushTimeout;
             }
             // If sender is not running, do a manual drain
             if (!self.started) {
                 self.sender.runOnce(std.heap.page_allocator);
             }
-            std.Thread.sleep(1_000_000); // 1ms
+            @import("ztime").sleepNs(1_000_000); // 1ms
         }
     }
 

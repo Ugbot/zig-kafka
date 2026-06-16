@@ -156,7 +156,7 @@ pub const OffsetManager = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(8, self.offset_commit_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         // Skip response header
@@ -191,7 +191,7 @@ pub const OffsetManager = struct {
             m.recordCommit(!commit_failed);
         }
 
-        self.last_commit_ms = std.time.milliTimestamp();
+        self.last_commit_ms = @import("ztime").milliTimestamp();
     }
 
     /// Commit specific offsets (synchronous).
@@ -258,7 +258,7 @@ pub const OffsetManager = struct {
         defer arena.deinit();
 
         const resp_header_ver = request_mod.responseHeaderVersion(8, self.offset_commit_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
@@ -284,7 +284,7 @@ pub const OffsetManager = struct {
             }
         }
 
-        self.last_commit_ms = std.time.milliTimestamp();
+        self.last_commit_ms = @import("ztime").milliTimestamp();
     }
 
     /// Check if auto-commit interval has elapsed, commit if needed.
@@ -359,7 +359,7 @@ pub const OffsetManager = struct {
 
         // Parse response
         const resp_header_ver = request_mod.responseHeaderVersion(9, self.offset_fetch_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);

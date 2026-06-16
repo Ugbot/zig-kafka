@@ -124,7 +124,7 @@ pub const Fetcher = struct {
     /// Returns slice of fetched records (valid until next fetch() call).
     pub fn fetch(self: *Self, timeout_ms: i64) ![]ConsumerRecord {
         std.debug.print("[FETCH] Starting fetch, timeout={d}ms, assigned_count={d}\n", .{ timeout_ms, self.subscription.assigned_count });
-        const start_ms = std.time.milliTimestamp();
+        const start_ms = @import("ztime").milliTimestamp();
 
         // Release previous batch's records back to pool
         if (self.pool_records_in_use > 0) {
@@ -183,7 +183,7 @@ pub const Fetcher = struct {
         var broker_it = broker_partitions.iterator();
         while (broker_it.next()) |entry| {
             // Check if timeout exceeded
-            const elapsed_ms = std.time.milliTimestamp() - start_ms;
+            const elapsed_ms = @import("ztime").milliTimestamp() - start_ms;
             if (elapsed_ms >= timeout_ms) break;
 
             const broker_id = entry.key_ptr.*;
@@ -205,7 +205,7 @@ pub const Fetcher = struct {
         broker_id: i32,
         partitions: []const PartitionToFetch,
     ) !void {
-        const start_ms = std.time.milliTimestamp();
+        const start_ms = @import("ztime").milliTimestamp();
         const conn = try self.broker_pool.getConnection(broker_id);
 
         // Use negotiated version for Fetch API (key=1)
@@ -324,7 +324,7 @@ pub const Fetcher = struct {
         };
 
         // Record successful fetch
-        const latency_ms: u64 = @intCast(std.time.milliTimestamp() - start_ms);
+        const latency_ms: u64 = @intCast(@import("ztime").milliTimestamp() - start_ms);
         self.metrics.recordFetchRequest(latency_ms);
     }
 
@@ -352,7 +352,7 @@ pub const Fetcher = struct {
 
         // Skip 4-byte size prefix + response header
         const resp_header_ver = request_mod.responseHeaderVersion(1, version);
-        var stream = std.io.fixedBufferStream(data[4..]);
+        var stream = @import("ztime").fixedBufferStream(data[4..]);
         const reader = stream.reader();
 
         std.debug.print("[PARSE] After skipping size prefix, bytes available={d}\n", .{ data.len - 4 });
@@ -613,7 +613,7 @@ pub const Fetcher = struct {
         const resp_size = try conn.sendRequest(2, negotiated_version, req);
 
         const resp_header_ver = request_mod.responseHeaderVersion(2, negotiated_version);
-        var stream = std.io.fixedBufferStream(conn.recv_buf[4..resp_size]);
+        var stream = @import("ztime").fixedBufferStream(conn.recv_buf[4..resp_size]);
         const reader = stream.reader();
 
         _ = try types.decodeInt32(reader);
